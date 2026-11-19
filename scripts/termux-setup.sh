@@ -333,7 +333,25 @@ case "${1:-start}" in
     install_autostart
     start_server
     ;;
+  fresh)
+    # Guaranteed-clean start: set the old folder aside, clone from GitHub, run.
+    say "unbg fresh — purana folder hata kar naya clone, phir live server"
+    if [ -e "$APP_DIR" ] && [ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ]; then
+      bak="$APP_DIR.bak-$(date +%Y%m%d-%H%M%S)"
+      mv "$APP_DIR" "$bak" && ok "Purana folder surakshit: $bak"
+    fi
+    need_pkgs
+    if [ ! -s "$TOKEN_FILE" ] && [ -z "${UNBG_TOKEN:-}" ]; then
+      die "GitHub token nahi mila (~/.unbg-token) — ek baar: echo TOKEN > ~/.unbg-token"
+    fi
+    sync_repo
+    install_deps
+    install_autostart
+    start_server
+    ;;
+
   fix)
+    need_pkgs
     say "unbg fix — purane process saaf, latest code, phir start"
     [ -f "$PID_FILE" ] && kill "$(server_pid)" 2>/dev/null || true
     pkill -f "astro dev.*--port" 2>/dev/null || true
@@ -468,7 +486,7 @@ case "${1:-start}" in
     ;;
   *)
     die "Unknown command: $1
-   Commands: fix | start | status | logs | stop | restart | update | port | live | doctor | open | autostart
+   Commands: fresh | fix | start | status | logs | stop | restart | update | port | live | doctor | open | autostart
    Purana script hai? pehle: bash ~/unbg/scripts/termux-setup.sh update"
     ;;
 esac
