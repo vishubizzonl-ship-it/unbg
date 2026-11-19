@@ -64,6 +64,9 @@ save_token() {
 
 # Fetch main and fast-forward. Never stores the token in .git/config.
 sync_repo() {
+  # A token passed through the environment is remembered once, so later runs
+  # (and the auto-update) need no input at all.
+  if [ -n "${UNBG_TOKEN:-}" ] && [ ! -s "$TOKEN_FILE" ]; then save_token "$UNBG_TOKEN"; fi
   local tok; tok="$(token)"
 
   if [ -d "$APP_DIR/.git" ]; then
@@ -121,28 +124,40 @@ lan_ip() {
   ip -4 addr show 2>/dev/null | awk '/inet .* (wlan|eth|rmnet)/{print $2}' | cut -d/ -f1 | head -1
 }
 
-running() {
-  [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null
+server_pid() { awk '{print $1}' "$PID_FILE" 2>/dev/null; }
+server_port() { awk '{print $2}' "$PID_FILE" 2>/dev/null; }
+
+pid_alive() {
+  local pid; pid="$(server_pid)"
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
 }
+
+healthy() { curl -fsS -o /dev/null "http://127.0.0.1:$1/" 2>/dev/null; }
+
+running() { pid_alive && [ "$(server_port)" = "$PORT" ] && healthy "$PORT"; }
 
 start_server() {
   if running; then
-    ok "Server already running (pid $(cat "$PID_FILE"))"
+    ok "Server already running (pid $(server_pid)) on port $PORT"
   else
+    if pid_alive; then
+      warn "Old instance on port $(server_port) — restarting on $PORT"
+      kill "$(server_pid)" 2>/dev/null; pkill -f "[a]stro dev" 2>/dev/null || true; sleep 1
+    fi
     say "Starting dev server on port $PORT…"
     # Detached restart loop: if the dev server ever crashes, it comes back.
-    nohup bash -c "cd '$APP_DIR' && while true; do npm run dev -- --host 0.0.0.0 --port $PORT; sleep 2; done" \
+    nohup bash -c "cd '$APP_DIR' && while true; do npm run dev -- --host 0.0.0.0 --port $PORT --force; sleep 2; done" \
       >"$LOG_FILE" 2>&1 &
-    echo $! >"$PID_FILE"
+    echo "$! $PORT" >"$PID_FILE"
     for _ in $(seq 1 40); do
       sleep 0.5
-      if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/" 2>/dev/null; then break; fi
+      if healthy "$PORT"; then break; fi
     done
   fi
 
   command -v termux-wake-lock >/dev/null && termux-wake-lock 2>/dev/null || true
 
-  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/" 2>/dev/null; then
+  if healthy "$PORT"; then
     ok "unbg is live → http://localhost:$PORT"
     local ip; ip="$(lan_ip)"
     [ -n "$ip" ] && ok "Same Wi-Fi par: http://$ip:$PORT"
@@ -167,7 +182,7 @@ case "${1:-start}" in
     ;;
   status)
     if running; then
-      ok "Running (pid $(cat "$PID_FILE")) on http://localhost:$PORT"
+      ok "Running (pid $(server_pid)) on http://localhost:$PORT"
     else
       warn "Not running — start with: unbg"
     fi
@@ -177,8 +192,8 @@ case "${1:-start}" in
     tail -n 40 -f "$LOG_FILE"
     ;;
   stop)
-    if running; then
-      kill "$(cat "$PID_FILE")" 2>/dev/null
+    if pid_alive; then
+      kill "$(server_pid)" 2>/dev/null
       pkill -f "astro dev" 2>/dev/null || true
       rm -f "$PID_FILE"
       ok "Stopped"
