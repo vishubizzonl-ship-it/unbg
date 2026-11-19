@@ -55,8 +55,29 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
           </option>
         ))
       }
+      <optgroup label="Cloud — photo unke server par jaati hai">
+        <option value="cloud:removebg">Cloud · remove.bg — free 50/month, best edges</option>
+      </optgroup>
     </select>
     <p id="up-note" class="mt-xxs text-caption-mono text-body"></p>
+
+    <div id="up-cloud" hidden class="mt-xs rounded-sm border border-hairline bg-canvas-soft p-xs">
+      <label for="up-key" class="block font-mono text-caption-mono text-body">
+        remove.bg API key — free 50 images/month at remove.bg/api
+      </label>
+      <input
+        id="up-key"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="paste key here"
+        class="mt-xxs w-full rounded-sm border border-hairline bg-canvas px-xs py-xxs font-mono text-body-sm text-ink"
+      />
+      <p class="mt-xxs text-caption-mono text-mute-ink">
+        Key sirf is phone ke browser mein rehti hai. Photo remove.bg ke server par jaati hai — baaki 8 models
+        on-device hi rehte hain.
+      </p>
+    </div>
 
     <label class="mt-xs flex items-center gap-xs text-caption-mono text-body">
       <input
@@ -160,6 +181,7 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
 <script>
   import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, type BgModel } from '../lib/models';
   import { decodeImage, removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
+  import { isCloudModel, removeBackgroundCloud, cloudKey, saveCloudKey, CloudError } from '../lib/cloud';
 
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
 
@@ -180,6 +202,8 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
     const again = $<HTMLButtonElement>('up-again')!;
     const timing = $('up-timing')!;
     const deviceLabel = $('up-device')!;
+    const cloudBlock = $('up-cloud')!;
+    const keyInput = $<HTMLInputElement>('up-key')!;
     const benchWrap = $('up-bench-wrap')!;
     const benchBody = $('up-bench')!;
 
@@ -188,8 +212,18 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
     let afterUrl: string | null = null;
     let busy = false;
 
+    const cloud = (): boolean => isCloudModel(select.value);
+
     const model = (): BgModel =>
       MODELS.find((m) => m.id === select.value) ?? MODELS[0];
+
+    const syncCloudBlock = (): void => {
+      cloudBlock.hidden = !cloud();
+      if (cloud() && !keyInput.value) keyInput.value = cloudKey();
+      deviceLabel.textContent = cloud() ? 'cloud' : device === 'webgpu' ? 'webgpu' : 'cpu (no webgpu)';
+    };
+
+    keyInput.addEventListener('change', () => saveCloudKey(keyInput.value));
 
     let device: 'webgpu' | 'wasm' = 'wasm';
     let userPickedModel = false;
@@ -199,13 +233,24 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
     deviceLabel.textContent = 'detecting…';
     void detectDevice().then((detected) => {
       device = detected;
-      deviceLabel.textContent = detected === 'webgpu' ? 'webgpu' : 'cpu (no webgpu)';
+      deviceLabel.textContent = cloud()
+        ? 'cloud'
+        : detected === 'webgpu'
+          ? 'webgpu'
+          : 'cpu (no webgpu)';
       // Start on the strongest model this device can actually run.
       if (!userPickedModel) select.value = recommendedModelId(detected);
       updateNote();
     });
 
     function updateNote() {
+      if (cloud()) {
+        note.textContent =
+          'remove.bg ka cloud model — free 50 images/month, sabse acche edges. Photo unke server par jaati hai.';
+        note.className = 'mt-xxs text-caption-mono text-body';
+        syncCloudBlock();
+        return;
+      }
       const m = model();
       const bits = [m.note, `license: ${m.license}`];
       if (m.webgpuOnly && device !== 'webgpu') bits.push('needs WebGPU — use another model');
@@ -217,7 +262,10 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
         ? 'mt-xxs text-caption-mono text-body'
         : 'mt-xxs text-caption-mono text-error';
     }
-    select.addEventListener('change', updateNote);
+    select.addEventListener('change', () => {
+      updateNote();
+      syncCloudBlock();
+    });
     updateNote();
 
     function setStatus(message: string, tone: 'normal' | 'error' = 'normal') {
@@ -263,6 +311,19 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
         before.src = beforeUrl;
         before.alt = `Original image · ${decoded.width}×${decoded.height}`;
 
+        if (cloud()) {
+          const out = await removeBackgroundCloud(file, ({ message }) => setStatus(message));
+          if (afterUrl) URL.revokeObjectURL(afterUrl);
+          afterUrl = URL.createObjectURL(out.blob);
+          after.src = afterUrl;
+          download.href = afterUrl;
+          download.setAttribute('download', 'unbg-cloud.png');
+          timing.textContent = `remove.bg · cloud · ${out.width}×${out.height}`;
+          addBench('remove.bg (cloud)', 'cloud', 0, 0);
+          setStatus('Done — background removed on remove.bg, full resolution PNG ready.');
+          return;
+        }
+
         const out = await removeBackground(decoded, select.value, ({ message }) => setStatus(message), {
           device,
           clean: cleanToggle.checked,
@@ -284,7 +345,9 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
         addBench(out.modelLabel, out.device, out.loadMs, out.inferMs);
         setStatus(`Done — ${fmt(out.inferMs)} inference, full resolution PNG ready.`);
       } catch (error) {
-        setStatus(`Failed: ${friendlyError(error, model().label)}`, 'error');
+        const message =
+          error instanceof CloudError ? error.message : friendlyError(error, model().label);
+        setStatus(`Failed: ${message}`, 'error');
       } finally {
         busy = false;
         again.disabled = false;

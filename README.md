@@ -234,6 +234,25 @@ Server: `https://mcp.docs.astro.build/mcp` (streamable HTTP, remote — nothing 
 - Design tokens (colors, type scale, spacing) `DESIGN.md` mein documented hain —
   naya UI banate waqt wahin se values lo.
 
+## Optional cloud path (bring your own key)
+
+On-device stays the default — nothing leaves the phone unless you ask. For the
+hard photos there is one cloud entry in the model list:
+
+```
+Cloud · remove.bg — free 50/month, best edges
+```
+
+1. Make a free key at <https://www.remove.bg/api> (50 images / month).
+2. Choose the Cloud model in the app and paste the key into the box that appears.
+3. Upload as usual. The key stays in this browser's localStorage; the local dev
+   server forwards the file to remove.bg with it (`POST /api/remove`).
+
+The proxy is dev middleware (`src/integrations/cloud-proxy.mjs`), so the static
+build needs no adapter and no secret in the bundle. Errors are translated:
+`402` → "free 50 credits khatam ho gaye is mahine", `401/403` → key galat,
+`429` → too many requests, no key → where to get one.
+
 ### The port is pinned, on purpose
 
 `unbg` serves on **4321** and stays there, because a URL that never changes is
