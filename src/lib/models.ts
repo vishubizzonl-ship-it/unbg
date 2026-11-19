@@ -34,9 +34,10 @@ export interface BgModel {
   webgpuOnly?: boolean;
   /**
    * Which runtime serves this entry. `imgly` runs @imgly/background-removal in a
-   * Web Worker (its own ONNX + wasm bundle), so it skips the transformers path.
+   * Web Worker (its own ONNX + wasm bundle). `server` talks to the self-hosted
+   * FastAPI + BiRefNet API in `server/` — still open source, still no keys.
    */
-  engine?: 'transformers' | 'imgly' | 'puter';
+  engine?: 'transformers' | 'imgly' | 'puter' | 'server';
 }
 
 export const MODELS: BgModel[] = [
@@ -189,7 +190,42 @@ export const MODELS: BgModel[] = [
     dtype: 'uint8',
     engine: 'puter',
   },
-
+  {
+    id: 'api/birefnet-portrait',
+    label: 'Server · BiRefNet Portrait — best on people',
+    note: 'Apne local server par full BiRefNet (972 MB, MIT) — portrait aur baal par sabse saaf; server/ chalu hona chahiye',
+    license: 'MIT',
+    licenseOk: true,
+    sizeMb: 0,
+    speed: 'fast',
+    scope: 'portrait',
+    dtype: 'fp32',
+    engine: 'server',
+  },
+  {
+    id: 'api/birefnet-general',
+    label: 'Server · BiRefNet General — products & objects',
+    note: 'Local server par general BiRefNet — products, janwar aur mixed scene par best',
+    license: 'MIT',
+    licenseOk: true,
+    sizeMb: 0,
+    speed: 'fast',
+    scope: 'general',
+    dtype: 'fp32',
+    engine: 'server',
+  },
+  {
+    id: 'api/u2netp',
+    label: 'Server · U²-Net-p — 5 MB fallback',
+    note: 'Local server ka sabse halka model — CPU par bhi fast, edges BiRefNet se kam saaf',
+    license: 'Apache-2.0',
+    licenseOk: true,
+    sizeMb: 0,
+    speed: 'fast',
+    scope: 'general',
+    dtype: 'fp32',
+    engine: 'server',
+  },
 ];
 
 export const DEFAULT_MODEL_ID = 'onnx-community/ormbg-ONNX';

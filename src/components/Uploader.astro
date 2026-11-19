@@ -80,6 +80,23 @@ import { PROVIDERS } from '../lib/cloud';
       </p>
     </div>
 
+    <div id="up-server" hidden class="mt-xs rounded-sm border border-hairline bg-canvas-soft p-xs">
+      <label for="up-server-url" class="block font-mono text-caption-mono text-body">
+        Local server URL — apna FastAPI + BiRefNet (server/README.md)
+      </label>
+      <input
+        id="up-server-url"
+        type="url"
+        inputmode="url"
+        spellcheck="false"
+        placeholder="http://127.0.0.1:8000"
+        class="mt-xxs w-full rounded-sm border border-hairline bg-canvas px-xs py-xxs font-mono text-body-sm text-ink"
+      />
+      <p id="up-server-hint" class="mt-xxs text-caption-mono text-mute-ink">
+        Server aapka apna hai — koi key nahi, photo internet par nahi jaati.
+      </p>
+    </div>
+
     <label class="mt-xs flex items-center gap-xs text-caption-mono text-body">
       <input
         id="up-clean"
@@ -112,6 +129,55 @@ import { PROVIDERS } from '../lib/cloud';
 
   <!-- result -->
   <div id="up-result" class="mt-sm" hidden>
+    <!-- before / after slider -->
+    <div id="up-compare" class="mt-sm" hidden>
+      <div class="relative overflow-hidden rounded-md border border-hairline bg-canvas-soft-2">
+        <img id="up-compare-before" alt="Original image" class="block w-full" />
+        <img
+          id="up-compare-after"
+          alt="Cutout, background removed"
+          class="checker absolute inset-0 size-full object-contain"
+          style="clip-path: inset(0 50% 0 0)"
+        />
+        <div
+          id="up-compare-line"
+          class="pointer-events-none absolute inset-y-0 w-px bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+          style="left: 50%"
+        ></div>
+        <input
+          id="up-compare-range"
+          type="range"
+          min="0"
+          max="100"
+          value="50"
+          step="0.5"
+          aria-label="Before and after slider"
+          class="absolute inset-x-0 bottom-0 h-full w-full cursor-ew-resize opacity-0"
+        />
+      </div>
+      <p class="mt-xxs font-mono text-caption-mono text-mute-ink">
+        Slider kheencho — left: cutout, right: original
+      </p>
+    </div>
+
+    <!-- background presets: composite happens on canvas, no second inference -->
+    <div id="up-bg-row" class="mt-sm flex flex-wrap items-center gap-xs" hidden>
+      <span class="font-mono text-caption-mono uppercase tracking-wider text-mute-ink">Background</span>
+      <button type="button" data-bg="transparent" class="up-bg rounded-pill border border-hairline px-xs py-xxs font-mono text-caption-mono text-ink hover:bg-canvas-soft-2">
+        Transparent
+      </button>
+      <button type="button" data-bg="white" class="up-bg rounded-pill border border-hairline px-xs py-xxs font-mono text-caption-mono text-ink hover:bg-canvas-soft-2">
+        White
+      </button>
+      <button type="button" data-bg="black" class="up-bg rounded-pill border border-hairline px-xs py-xxs font-mono text-caption-mono text-ink hover:bg-canvas-soft-2">
+        Black
+      </button>
+      <label class="flex items-center gap-xxs rounded-pill border border-hairline px-xs py-xxs font-mono text-caption-mono text-ink">
+        <input id="up-bg-color" type="color" value="#ff8800" class="size-3.5 border-0 bg-transparent p-0" />
+        <button type="button" id="up-bg-custom">Custom</button>
+      </label>
+    </div>
+
     <div class="grid grid-cols-2 gap-sm">
       <figure class="overflow-hidden rounded-md border border-hairline">
         <div class="relative aspect-[4/3] bg-canvas-soft-2">
@@ -195,6 +261,15 @@ import { PROVIDERS } from '../lib/cloud';
   import { removeBackgroundImgly, imglyModelFor, IMGLY_MODEL_PREFIX } from '../lib/imgly';
   import { refineCutout } from '../lib/refine';
   import { removeBackgroundPuter, puterError, PUTER_MODEL_ID } from '../lib/puter';
+  import { compositeBlob, backgroundCss, parseBackground } from '../lib/compose';
+  import {
+    isServerModel,
+    removeBackgroundServer,
+    serverHealth,
+    serverBase,
+    saveServerUrl,
+    ServerError,
+  } from '../lib/server-api';
   import {
     isCloudModel,
     cloudProvider,
@@ -225,6 +300,16 @@ import { PROVIDERS } from '../lib/cloud';
     const timing = $('up-timing')!;
     const deviceLabel = $('up-device')!;
     const cloudBlock = $('up-cloud')!;
+    const serverBlock = $('up-server')!;
+    const serverUrlInput = $<HTMLInputElement>('up-server-url')!;
+    const serverHint = $('up-server-hint')!;
+    const compare = $('up-compare')!;
+    const compareBefore = $<HTMLImageElement>('up-compare-before')!;
+    const compareAfter = $<HTMLImageElement>('up-compare-after')!;
+    const compareRange = $<HTMLInputElement>('up-compare-range')!;
+    const compareLine = $('up-compare-line')!;
+    const bgRow = $('up-bg-row')!;
+    const bgColor = $<HTMLInputElement>('up-bg-color')!;
     const maskToggle = $<HTMLInputElement>('up-mask-toggle')!;
     const matteToggle = $<HTMLInputElement>('up-matte')!;
     const keyInput = $<HTMLInputElement>('up-key')!;
@@ -237,6 +322,9 @@ import { PROVIDERS } from '../lib/cloud';
     let beforeUrl: string | null = null;
     let afterUrl: string | null = null;
     let maskUrl: string | null = null;
+    let cutout: Blob | null = null;
+    let cutoutName = 'unbg-cutout.png';
+    let background = 'transparent';
     let busy = false;
 
     const cloud = (): boolean => isCloudModel(select.value);
@@ -246,6 +334,86 @@ import { PROVIDERS } from '../lib/cloud';
 
     const provider = () => cloudProvider(select.value);
 
+    const server = (): boolean => isServerModel(select.value);
+
+    /**
+     * The cutout is kept with its real alpha; every background preset is a
+     * canvas composite of that one blob, so white / custom colour is instant and
+     * never re-runs a model.
+     */
+    async function applyBackground(value: string) {
+      if (!cutout) return;
+      background = value;
+      for (const button of document.querySelectorAll<HTMLButtonElement>('.up-bg')) {
+        const active = button.dataset.bg === value;
+        button.className = active
+          ? 'up-bg rounded-pill border border-ink bg-ink px-xs py-xxs font-mono text-caption-mono text-white'
+          : 'up-bg rounded-pill border border-hairline px-xs py-xxs font-mono text-caption-mono text-ink hover:bg-canvas-soft-2';
+      }
+      const isFlat = parseBackground(value) !== null;
+      after.parentElement?.classList.toggle('checker', !isFlat);
+      if (isFlat) after.parentElement?.style.setProperty('background', backgroundCss(value));
+
+      let blob: Blob;
+      try {
+        blob = await compositeBlob(cutout, value);
+      } catch {
+        setStatus('Background lagane mein dikkat aayi — transparent PNG download ho jayega.', 'error');
+        return;
+      }
+      if (afterUrl) URL.revokeObjectURL(afterUrl);
+      afterUrl = URL.createObjectURL(blob);
+      after.src = afterUrl;
+      compareAfter.src = afterUrl;
+      download.href = afterUrl;
+      const suffix = isFlat ? `-${value.replace('#', '')}` : '';
+      download.setAttribute('download', cutoutName.replace(/\.png$/i, `${suffix}.png`));
+    }
+
+    async function rememberCutout(blob: Blob, name: string) {
+      cutout = blob;
+      cutoutName = name;
+      compare.hidden = false;
+      bgRow.hidden = false;
+      if (beforeUrl) compareBefore.src = beforeUrl;
+      compareRange.value = '50';
+      compareAfter.style.clipPath = 'inset(0 50% 0 0)';
+      compareLine.style.left = '50%';
+      await applyBackground('transparent');
+    }
+
+    compareRange.addEventListener('input', () => {
+      const percent = Number(compareRange.value);
+      compareAfter.style.clipPath = `inset(0 ${100 - percent}% 0 0)`;
+      compareLine.style.left = `${percent}%`;
+    });
+
+    for (const button of document.querySelectorAll<HTMLButtonElement>('.up-bg')) {
+      button.addEventListener('click', () => void applyBackground(button.dataset.bg ?? 'transparent'));
+    }
+    $('up-bg-custom')!.addEventListener('click', () => void applyBackground(bgColor.value));
+    bgColor.addEventListener('change', () => void applyBackground(bgColor.value));
+
+    async function syncServerBlock() {
+      serverBlock.hidden = !server();
+      if (!server()) return;
+      if (!serverUrlInput.value) serverUrlInput.value = serverBase();
+      serverHint.textContent = 'Server check kar raha hoon…';
+      serverHint.className = 'mt-xxs text-caption-mono text-mute-ink';
+      const health = await serverHealth(serverUrlInput.value || serverBase());
+      serverHint.textContent = health.ok
+        ? `✓ ${health.message}`
+        : `${health.message}`;
+      serverHint.className = health.ok
+        ? 'mt-xxs text-caption-mono text-body'
+        : 'mt-xxs text-caption-mono text-error';
+    }
+
+    serverUrlInput.addEventListener('change', () => {
+      saveServerUrl(serverUrlInput.value);
+      void syncServerBlock();
+    });
+
     const syncCloudBlock = (): void => {
       const info = PROVIDERS[provider()];
       cloudBlock.hidden = !cloud();
@@ -253,7 +421,13 @@ import { PROVIDERS } from '../lib/cloud';
       keyInput.placeholder = info.keyPlaceholder;
       keyHint.textContent = `${info.hint} Key sirf is phone ke browser mein rehti hai; baaki 8 models on-device hi rehte hain.`;
       if (cloud()) keyInput.value = cloudKey(provider());
-      deviceLabel.textContent = cloud() ? 'cloud' : device === 'webgpu' ? 'webgpu' : 'cpu (no webgpu)';
+      deviceLabel.textContent = cloud()
+        ? 'cloud'
+        : server()
+          ? 'local server'
+          : device === 'webgpu'
+            ? 'webgpu'
+            : 'cpu (no webgpu)';
     };
 
     keyInput.addEventListener('change', () => {
@@ -287,6 +461,13 @@ import { PROVIDERS } from '../lib/cloud';
         return;
       }
       const m = model();
+      if (m.engine === 'server') {
+        note.textContent = `${m.note} · license: ${m.license}`;
+        note.className = 'mt-xxs text-caption-mono text-body';
+        syncCloudBlock();
+        void syncServerBlock();
+        return;
+      }
       if (m.engine === 'puter') {
         note.textContent = `${m.note} · license: ${m.license}`;
         note.className = 'mt-xxs text-caption-mono text-body';
@@ -312,6 +493,7 @@ import { PROVIDERS } from '../lib/cloud';
     select.addEventListener('change', () => {
       updateNote();
       syncCloudBlock();
+      void syncServerBlock();
     });
     updateNote();
 
@@ -356,6 +538,9 @@ import { PROVIDERS } from '../lib/cloud';
 
       result.hidden = false;
       after.removeAttribute('src');
+      compare.hidden = true;
+      bgRow.hidden = true;
+      cutout = null;
       setStatus('Reading image…');
       again.disabled = true;
       drop.setAttribute('aria-busy', 'true');
@@ -379,6 +564,7 @@ import { PROVIDERS } from '../lib/cloud';
           const isHf = chosen === 'huggingface';
           const cloudName = isHf ? 'Hugging Face' : 'remove.bg';
           download.setAttribute('download', isHf ? 'unbg-huggingface.png' : 'unbg-removebg.png');
+          await rememberCutout(out.blob, isHf ? 'unbg-huggingface.png' : 'unbg-removebg.png');
           timing.textContent = `${cloudName} · cloud · ${out.width}×${out.height}`;
           addBench(`${cloudName} (cloud)`, 'cloud', 0, 0);
           setStatus(`Done — background removed on ${cloudName}, full resolution PNG ready.`);
@@ -392,6 +578,7 @@ import { PROVIDERS } from '../lib/cloud';
           after.src = afterUrl;
           download.href = afterUrl;
           download.setAttribute('download', 'unbg-puter.png');
+          await rememberCutout(out.blob, 'unbg-puter.png');
           timing.textContent = `Puter · ${out.width}×${out.height} · ${out.transparentPct}% transparent`;
           addBench('Puter (cloud, user pays)', 'cloud', 0, 0);
           setStatus(
@@ -421,10 +608,34 @@ import { PROVIDERS } from '../lib/cloud';
           after.src = afterUrl;
           download.href = afterUrl;
           download.setAttribute('download', 'unbg-imgly.png');
+          await rememberCutout(blob, 'unbg-imgly.png');
           const size = await measure(blob);
           timing.textContent = `IMG.LY ${imglyModelFor(select.value)} · web worker · ${(out.ms / 1000).toFixed(1)}s · ${size}${note}`;
           addBench(`IMG.LY ${imglyModelFor(select.value)} (worker)`, 'worker', out.ms, out.ms);
           setStatus(`Done — IMG.LY ${(out.ms / 1000).toFixed(1)}s, edges refined.`);
+          return;
+        }
+
+        if (isServerModel(select.value)) {
+          const out = await removeBackgroundServer(
+            file,
+            select.value,
+            {
+              matte: matteToggle.checked,
+              detail: 'normal',
+              subject: model().scope === 'portrait' ? 'person' : 'object',
+            },
+            ({ message }) => setStatus(message),
+          );
+          await rememberCutout(out.blob, 'unbg-server.png');
+          const label = out.meta.model_label ?? out.meta.model;
+          const coverage =
+            typeof out.meta.coverage === 'number'
+              ? ` · mask ${Math.round(out.meta.coverage * 100)}%`
+              : '';
+          timing.textContent = `${label} · local server · ${(out.ms / 1000).toFixed(1)}s · ${out.meta.width}×${out.meta.height}${coverage}`;
+          addBench(label, 'server', 0, out.ms);
+          setStatus(`Done — server ne background hata diya, full resolution PNG ready.`);
           return;
         }
 
@@ -438,6 +649,7 @@ import { PROVIDERS } from '../lib/cloud';
         after.src = afterUrl;
         download.href = afterUrl;
         download.setAttribute('download', `unbg-${model().label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`);
+        await rememberCutout(out.blob, `unbg-${model().label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`);
         const total = out.loadMs + out.inferMs;
         const cleaned = out.cleanup.blobsRemoved + out.cleanup.holesFilled;
         const cleanNote = cleaned > 0 ? ` · cleaned ${cleaned}px` : '';
@@ -458,11 +670,13 @@ import { PROVIDERS } from '../lib/cloud';
         setStatus(`Done — ${fmt(out.inferMs)} inference, full resolution PNG ready.`);
       } catch (error) {
         const message =
-          error instanceof CloudError
+          error instanceof ServerError
             ? error.message
-            : select.value === PUTER_MODEL_ID
-              ? puterError(error)
-              : friendlyError(error, model().label);
+            : error instanceof CloudError
+              ? error.message
+              : select.value === PUTER_MODEL_ID
+                ? puterError(error)
+                : friendlyError(error, model().label);
         setStatus(`Failed: ${message}`, 'error');
       } finally {
         busy = false;

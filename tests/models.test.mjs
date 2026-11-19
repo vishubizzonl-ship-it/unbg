@@ -41,3 +41,14 @@ test('recommendations stay honest: BEN2 on GPU, small model on CPU', () => {
   assert.equal(recommendedModelId('wasm'), DEFAULT_MODEL_ID);
   assert.ok(MODELS.find((m) => m.id === DEFAULT_MODEL_ID).sizeMb <= 100, 'CPU default stays small');
 });
+
+test('local-server models are opt-in, at the end, and never the default', () => {
+  const serverModels = MODELS.filter((m) => m.engine === 'server');
+  assert.ok(serverModels.length >= 2, 'portrait + general server models');
+  for (const m of serverModels) {
+    assert.match(m.id, /^api\//, `server ids are namespaced: ${m.id}`);
+    assert.equal(m.licenseOk, true, `only MIT/Apache models on the server list: ${m.id}`);
+    assert.notEqual(m.id, DEFAULT_MODEL_ID, 'the server is never the default engine');
+  }
+  assert.ok(ids.length >= 16, 'all on-device models are still listed');
+});

@@ -290,6 +290,42 @@ while a ~44 MB model downloads and runs on first use.
 * First run downloads model + wasm from `staticimgly.com` (~44 MB), cached after
   that. Offline use needs those assets copied into the project.
 
+## Optional local server (Phase 5) — full BiRefNet on your own machine
+
+The browser engine is the default and stays the default. When you want
+server-grade quality — full BiRefNet (972 MB), batch jobs, or an API for other
+tools — run the inference service in `server/`:
+
+```bash
+cd server
+python -m pip install --user -r requirements.txt
+python scripts/fetch_models.py birefnet-512          # 473 MB — good CPU default
+python scripts/selftest.py                           # proves it actually works
+python -m uvicorn unbg_server.main:app --port 8000
+```
+
+Then pick **Server · BiRefNet Portrait** (or General / U²-Net-p) in the model
+dropdown. The app pings `/api/health`, shows the URL it will use, and sends the
+photo only to *that* address. There is no API key because there is no third
+party — the server is yours.
+
+What the server adds on top of the browser engine:
+
+| | browser | local server |
+|---|---|---|
+| models | 9 on-device + 4 remote | BiRefNet General / Portrait / 512 / Lite, U²-Net, U²-Net-p |
+| weights | ≤ 366 MB, WebGPU-bound | full 972 MB fp32 BiRefNet |
+| matting | ViTMatte (99 MB) | closed-form matting (pymatting) on the mask |
+| big photos | one pass, downscaled | `detail=high` → tiled 1024 px crops, native detail |
+| batch | one at a time | `POST /api/batch`, 8 files, per-file JSON |
+| licence | MIT / Apache / AGPL mix | MIT + Apache-2.0 only |
+
+Both paths feed the same result panel: before/after slider, transparent / white /
+black / custom-colour preview (composited on canvas, so switching never re-runs a
+model), and a full-resolution PNG download.
+
+Full API, configuration table and model list: [`server/README.md`](server/README.md).
+
 ## Optional cloud path (bring your own key)
 
 On-device stays the default — nothing leaves the phone unless you ask. For the

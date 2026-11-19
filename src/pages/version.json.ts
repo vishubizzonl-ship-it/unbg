@@ -29,7 +29,7 @@ export const GET: APIRoute = () =>
       {
         app: 'unbg',
         tagline: 'remove the background. keep every pixel.',
-        version: '0.8.1',
+        version: '0.9.0',
         build: buildId(),
         theme: 'ink-on-canvas (Vercel design language)',
         models: {
@@ -39,6 +39,12 @@ export const GET: APIRoute = () =>
         },
         device_runtime: 'transformers.js + onnxruntime-web (WebGPU / WASM)',
         uploads: 'none — inference runs in the browser',
+        optional_backend: {
+          path: 'server/',
+          stack: 'FastAPI + ONNX Runtime + BiRefNet (MIT) / U²-Net (Apache-2.0)',
+          default_port: 8000,
+          keys_required: false,
+        },
       },
       null,
       2,
