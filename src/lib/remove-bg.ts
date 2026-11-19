@@ -9,7 +9,7 @@
  */
 
 import { MODELS, type BgModel } from './models';
-import { cleanMask, type CleanupReport } from './mask';
+import { cleanMask, coverage, invert, looksInverted, type CleanupReport } from './mask';
 import { decodeImage, DecodeError, formatLabel, isBrowserDecodable, type DecodedImage } from './decode';
 
 export { decodeImage, DecodeError, type DecodedImage };
@@ -33,6 +33,12 @@ export interface Removal {
   cleanup: CleanupReport;
   /** True when the canvas was capped at 40 MP. */
   scaled: boolean;
+  /** Share of pixels kept — a number worth showing, and how bugs show up. */
+  coverage: number;
+  /** The mask flipped itself because it had kept the background. */
+  invertedMask: boolean;
+  /** Greyscale PNG of the final mask, for the 'show mask' toggle. */
+  maskBlob: Blob | null;
 }
 
 type Libs = typeof import('@huggingface/transformers');
@@ -289,6 +295,25 @@ async function composite(
   return { blob, width: out.width, height: out.height, scaled: shrink < 1 };
 }
 
+/** The final mask as a greyscale PNG: white = kept, black = removed. */
+async function maskToBlob(plane: { data: Float32Array; width: number; height: number }): Promise<Blob | null> {
+  const canvas = document.createElement('canvas');
+  canvas.width = plane.width;
+  canvas.height = plane.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  const image = ctx.createImageData(plane.width, plane.height);
+  for (let i = 0, p = 0; i < plane.data.length; i++, p += 4) {
+    const v = Math.min(255, Math.max(0, Math.round(plane.data[i] * 255)));
+    image.data[p] = v;
+    image.data[p + 1] = v;
+    image.data[p + 2] = v;
+    image.data[p + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+  return new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+}
+
 /** Turn runtime noise into something a human can act on. */
 export function friendlyError(error: unknown, modelLabel?: string): string {
   if (error instanceof DecodeError) {
@@ -377,14 +402,37 @@ export async function removeBackground(
   const tensor = firstTensor(output);
   const plane = toAlphaPlane(tensor);
 
+  // Some models return the background's probability. Keeping the border is a
+  // strong signal that the polarity is wrong, and flipping is cheap.
+  const invertedMask = looksInverted(plane);
+  if (invertedMask) {
+    invert(plane);
+    onStage({ stage: 'run', message: 'Mask ulta aaya tha — seedha kar diya…' });
+  }
+
   // Sharpen the ramp, drop stray blobs, close holes, feather the edge.
   onStage({ stage: 'run', message: 'Cleaning up the mask…' });
   const cleanup = cleanMask(plane, { clean: options.clean ?? true, featherRadius: 1 });
 
   onStage({ stage: 'run', message: 'Compositing PNG…' });
   const { blob, width, height, scaled } = await composite(image, plane);
+  const maskBlob = await maskToBlob(plane);
+  const kept = coverage(plane);
 
   onStage({ stage: 'done', message: 'Done' });
 
-  return { blob, width, height, loadMs, inferMs, device, modelLabel: m.label, cleanup, scaled };
+  return {
+    blob,
+    width,
+    height,
+    loadMs,
+    inferMs,
+    device,
+    modelLabel: m.label,
+    cleanup,
+    scaled,
+    coverage: kept,
+    invertedMask,
+    maskBlob,
+  };
 }

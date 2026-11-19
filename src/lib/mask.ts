@@ -13,6 +13,52 @@
  * Pure functions, no DOM: unit-testable in Node.
  */
 
+/**
+ * Fraction of pixels the mask keeps. A cutout that keeps 0.5 % or 99 % of the
+ * frame is almost always a polarity or threshold problem, not a photo problem.
+ */
+export function coverage(plane: Plane, threshold = 0.5): number {
+  const { data } = plane;
+  let kept = 0;
+  for (let i = 0; i < data.length; i++) if (data[i] >= threshold) kept++;
+  return data.length ? kept / data.length : 0;
+}
+
+/**
+ * Fraction of *border* pixels the mask keeps. Backgrounds fill the frame edge,
+ * subjects rarely do — which is what makes this a usable polarity check.
+ */
+export function borderCoverage(plane: Plane, threshold = 0.5, band = 0.04): number {
+  const { data, width, height } = plane;
+  const b = Math.max(1, Math.round(Math.min(width, height) * band));
+  let kept = 0;
+  let total = 0;
+  const look = (x: number, y: number) => {
+    total++;
+    if (data[y * width + x] >= threshold) kept++;
+  };
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < b; y++) look(x, y);
+    for (let y = Math.max(0, height - b); y < height; y++) look(x, y);
+  }
+  for (let y = b; y < height - b; y++) {
+    for (let x = 0; x < b; x++) look(x, y);
+    for (let x = Math.max(0, width - b); x < width; x++) look(x, y);
+  }
+  return total ? kept / total : 0;
+}
+
+/** True when the mask looks like it kept the background instead of the subject. */
+export function looksInverted(plane: Plane): boolean {
+  return borderCoverage(plane) > 0.6 && coverage(plane) > 0.5;
+}
+
+/** Flip the mask (1 − v). */
+export function invert(plane: Plane): void {
+  const { data } = plane;
+  for (let i = 0; i < data.length; i++) data[i] = 1 - data[i];
+}
+
 export interface Plane {
   data: Float32Array;
   width: number;

@@ -1,7 +1,10 @@
 // Node's test runner: node --test tests/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanMask, labelComponents, binarize, keepLargest, fillHoles, feather } from '../dist-test/mask.js';
+import {
+  cleanMask, labelComponents, binarize, keepLargest, fillHoles, feather,
+  coverage, borderCoverage, looksInverted, invert,
+} from '../dist-test/mask.js';
 
 const makePlane = (w, h, fill = 0) => ({ data: new Float32Array(w * h).fill(fill), width: w, height: h });
 const rect = (p, x0, y0, x1, y1, v = 1) => {
@@ -65,4 +68,27 @@ test('cleanMask full pipeline keeps the subject and kills junk', () => {
   assert.ok(report.holesFilled > 0);
   assert.equal(at(p, 25, 25), 1, 'subject centre stays');
   assert.equal(at(p, 1, 45), 0, 'blot gone');
+});
+
+// Polarity: a mask that keeps the frame edge is keeping the background.
+test('borderCoverage separates a subject mask from a background mask', () => {
+  const subject = makePlane(40, 40);          // clear frame, subject in the middle
+  rect(subject, 14, 14, 26, 26);
+  const background = makePlane(40, 40, 1);    // everything kept
+  rect(background, 14, 14, 26, 26, 0);
+
+  assert.ok(borderCoverage(subject) < 0.1, `subject border ${borderCoverage(subject)}`);
+  assert.ok(borderCoverage(background) > 0.9, `background border ${borderCoverage(background)}`);
+  assert.equal(looksInverted(subject), false);
+  assert.equal(looksInverted(background), true);
+});
+
+test('coverage reports the kept share, and invert flips it', () => {
+  const p = makePlane(20, 20);
+  rect(p, 0, 0, 10, 20);                       // half the frame
+  assert.equal(coverage(p), 0.5);
+  invert(p);
+  assert.equal(coverage(p), 0.5);
+  assert.equal(at(p, 0, 0), 0);
+  assert.equal(at(p, 19, 19), 1);
 });

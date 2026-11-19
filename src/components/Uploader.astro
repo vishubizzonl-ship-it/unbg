@@ -89,6 +89,11 @@ import { PROVIDERS } from '../lib/cloud';
       />
       <span>Clean up — remove stray spots, fill holes, soften edges</span>
     </label>
+
+    <label class="mt-xs flex items-center gap-xs text-caption-mono text-body">
+      <input id="up-mask-toggle" type="checkbox" disabled class="size-3.5 accent-[#171717]" />
+      <span>Mask dekho — jo AI ne kata (white = rakha, black = hataya)</span>
+    </label>
   </div>
 
   <!-- status (announced to screen readers) -->
@@ -214,6 +219,7 @@ import { PROVIDERS } from '../lib/cloud';
     const timing = $('up-timing')!;
     const deviceLabel = $('up-device')!;
     const cloudBlock = $('up-cloud')!;
+    const maskToggle = $<HTMLInputElement>('up-mask-toggle')!;
     const keyInput = $<HTMLInputElement>('up-key')!;
     const keyLabel = $('up-key-label')!;
     const keyHint = $('up-key-hint')!;
@@ -223,6 +229,7 @@ import { PROVIDERS } from '../lib/cloud';
     let currentFile: File | Blob | null = null;
     let beforeUrl: string | null = null;
     let afterUrl: string | null = null;
+    let maskUrl: string | null = null;
     let busy = false;
 
     const cloud = (): boolean => isCloudModel(select.value);
@@ -416,12 +423,18 @@ import { PROVIDERS } from '../lib/cloud';
         const total = out.loadMs + out.inferMs;
         const cleaned = out.cleanup.blobsRemoved + out.cleanup.holesFilled;
         const cleanNote = cleaned > 0 ? ` · cleaned ${cleaned}px` : '';
+        if (maskUrl) URL.revokeObjectURL(maskUrl);
+        maskUrl = out.maskBlob ? URL.createObjectURL(out.maskBlob) : null;
+        maskToggle.disabled = !maskUrl;
+        maskToggle.checked = false;
+
+        const coverageNote = ` · mask ${Math.round(out.coverage * 100)}%`;
         const scaleNote = out.scaled
           ? ' · scaled to 40 MP'
           : decoded.downscaled
             ? ' · phone ne 2048px par decode kiya'
             : '';
-        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}${cleanNote}${scaleNote}`;
+        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}${cleanNote}${scaleNote}${coverageNote}`;
         addBench(out.modelLabel, out.device, out.loadMs, out.inferMs);
         setStatus(`Done — ${fmt(out.inferMs)} inference, full resolution PNG ready.`);
       } catch (error) {
@@ -481,6 +494,14 @@ import { PROVIDERS } from '../lib/cloud';
       if (file) {
         event.preventDefault();
         void run(file);
+      }
+    });
+
+    maskToggle.addEventListener('change', () => {
+      if (maskToggle.checked && maskUrl) {
+        after.src = maskUrl;
+      } else if (afterUrl) {
+        after.src = afterUrl;
       }
     });
 
