@@ -233,3 +233,17 @@ Server: `https://mcp.docs.astro.build/mcp` (streamable HTTP, remote — nothing 
   `src/styles/global.css` ke `@theme` block mein add karo.
 - Design tokens (colors, type scale, spacing) `DESIGN.md` mein documented hain —
   naya UI banate waqt wahin se values lo.
+
+### When the server will not come up
+
+```bash
+unbg fix     # kill leftovers, pull, install, then start on a free port
+```
+
+`unbg start` no longer trusts the port it was given. It asks `/version.json`
+first, and if something else owns the port it walks 4321-4340 and saves the
+first free one. If astro quietly moves to another port instead (Vite does that
+when a port is taken), the log line `Local http://localhost:NNNN` is read back
+and that port is adopted and saved. If the dev server still refuses to start,
+the last 12 lines of the server log are printed right there, and two more ports
+are tried before giving up.

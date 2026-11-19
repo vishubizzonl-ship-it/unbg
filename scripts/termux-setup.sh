@@ -214,41 +214,87 @@ notify_live() {
     --action "termux-open http://localhost:$PORT" 2>/dev/null || true
 }
 
+pick_free_port() {
+  local p
+  for p in $(seq 4321 4340); do
+    if [ "$p" != "$PORT" ] && ! port_open "$p"; then
+      PORT="$p"; printf '%s' "$PORT" >"$PORT_FILE"; return 0
+    fi
+  done
+  return 1
+}
+
+spawn_supervisor() {
+  local interval="${UNBG_CHECK_INTERVAL:-}"
+  if [ -z "$interval" ] && [ -s "$HOME/.unbg-interval" ]; then
+    interval="$(tr -dc '0-9' <"$HOME/.unbg-interval")"
+  fi
+  [ -n "$interval" ] || interval=1
+  LOG_MARK="$(wc -l <"$LOG_FILE" 2>/dev/null || echo 0)"
+  nohup env UNBG_DIR="$APP_DIR" UNBG_PORT="$PORT" UNBG_CHECK_INTERVAL="$interval" \
+    UNBG_LOG="$LOG_FILE" bash "$APP_DIR/scripts/unbg-watch.sh" >>"$LOG_FILE" 2>&1 &
+  echo "$! $PORT" >"$PID_FILE"
+}
+
+new_log_lines() { tail -n +"$(( ${LOG_MARK:-0} + 1 ))" "$LOG_FILE" 2>/dev/null; }
+
+# Vite silently moves to the next port when the one it was given is taken, so a
+# check that only looks at $PORT can call a perfectly healthy server "not up".
+# Watch the log for the port astro actually chose and adopt it.
+wait_up() {
+  local i found
+  printf '   waiting for the dev server'
+  for i in $(seq 1 90); do
+    sleep 0.5
+    printf '.'
+    if serving_unbg "$PORT"; then printf ' up\n'; return 0; fi
+    found="$(new_log_lines | grep -oE 'localhost:[0-9]{4,5}' | tail -1 | cut -d: -f2)"
+    if [ -n "$found" ] && [ "$found" != "$PORT" ] && serving_unbg "$found"; then
+      printf ' up\n'
+      warn "astro ne khud port $found chuna ($PORT busy tha) — wahi use kar rahe hain"
+      PORT="$found"; printf '%s' "$PORT" >"$PORT_FILE"
+      echo "$(server_pid) $PORT" >"$PID_FILE"
+      return 0
+    fi
+  done
+  printf ' nahi hua\n'
+  return 1
+}
+
 start_server() {
   say "Checking port $PORT…"
   if serving_unbg "$PORT"; then
-    ok "unbg already live on port $PORT (pid $(server_pid || echo "—"))"
+    ok "unbg already live on port $PORT"
   else
-    if port_open "$PORT"; then
-      die "port $PORT par koi DOOSRA app chal raha hai — /version.json se unbg confirm nahi hua.
-   title: $(curl -fsS --connect-timeout 2 --max-time 4 "http://127.0.0.1:$PORT/" 2>/dev/null | grep -o '<title>[^<]*' | head -1 | cut -c8-)
-   Do options:  us app ko band karo,  ya  'unbg port 4322' (hamesha ke liye)
-   Detail:      unbg doctor"
-    fi
     if pid_alive; then
       warn "Purana instance (pid $(server_pid)) saaf kar raha hoon…"
       kill "$(server_pid)" 2>/dev/null || true
       pkill -f "astro dev.*--port $(server_port)" 2>/dev/null || true
       sleep 1
+      rm -f "$PID_FILE"
     fi
-    say "Starting supervisor on port $PORT…"
-    # The supervisor keeps the dev server alive *and* pulls new commits from
-    # GitHub on a timer, so the site stays live and current without deploying.
-    local interval="${UNBG_CHECK_INTERVAL:-}"
-    if [ -z "$interval" ] && [ -s "$HOME/.unbg-interval" ]; then
-      interval="$(tr -dc '0-9' <"$HOME/.unbg-interval")"
-    fi
-    [ -n "$interval" ] || interval=1
-    nohup env UNBG_DIR="$APP_DIR" UNBG_PORT="$PORT" UNBG_CHECK_INTERVAL="$interval" \
-      UNBG_LOG="$LOG_FILE" bash "$APP_DIR/scripts/unbg-watch.sh" >>"$LOG_FILE" 2>&1 &
-    echo "$! $PORT" >"$PID_FILE"
-    printf '   waiting for the dev server'
-    for _ in $(seq 1 60); do
-      sleep 0.5
-      printf '.'
-      if serving_unbg "$PORT"; then printf ' up\n'; break; fi
+    local attempt=0
+    while : ; do
+      attempt=$((attempt + 1))
+      if port_open "$PORT"; then
+        warn "port $PORT par kuch aur chal raha hai — khali port dhoondh raha hoon"
+        pick_free_port || die "4321–4340 sab busy — 'unbg port 4400' chalao"
+        ok "port $PORT"
+      fi
+      say "Starting supervisor on port $PORT… (koshish $attempt/3)"
+      spawn_supervisor
+      if wait_up; then break; fi
+      warn "port $PORT par server up nahi hua — server log:"
+      new_log_lines | tail -n 12 | sed 's/^/   /'
+      kill "$(server_pid)" 2>/dev/null || true
+      pkill -f "astro dev.*--port $PORT" 2>/dev/null || true
+      rm -f "$PID_FILE"
+      if [ "$attempt" -ge 3 ]; then
+        die "3 koshishon mein up nahi hua — upar ka log screenshot bhejein"
+      fi
+      pick_free_port || die "khali port nahi mila — 'unbg port 4400' chalao"
+      say "Dusre port par try: $PORT"
     done
-    printf '\n'
   fi
 
   command -v termux-wake-lock >/dev/null && termux-wake-lock 2>/dev/null || true
@@ -268,7 +314,7 @@ start_server() {
     echo "   logs: unbg logs   ·   stop: unbg stop   ·   kaunsa app? unbg doctor"
     command -v termux-open >/dev/null && termux-open "http://localhost:$PORT" 2>/dev/null || true
   else
-    warn "Server start hua par abhi jawab nahi de raha — 'unbg logs' dekhein"
+    warn "Server ne jawab nahi diya — 'unbg doctor' ya 'unbg logs' dekhein"
   fi
 }
 
@@ -297,17 +343,6 @@ case "${1:-start}" in
     sync_repo
     install_deps
     install_autostart
-    if ! serving_unbg "$PORT" && port_open "$PORT"; then
-      warn "port $PORT kisi doosre app ne pakda hua hai — khud khali port dhoondh raha hoon"
-      for p in $(seq 4321 4340); do
-        if ! port_open "$p"; then
-          PORT="$p"; printf '%s' "$p" >"$PORT_FILE"
-          ok "Naya port: $p (yaad rakh liya)"
-          break
-        fi
-      done
-      if port_open "$PORT"; then die "4321–4340 sab busy — 'unbg port 4400' chalao"; fi
-    fi
     start_server
     ;;
 
