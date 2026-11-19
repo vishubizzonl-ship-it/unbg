@@ -118,7 +118,7 @@ sync_repo() {
     [ -s "$TOKEN_FILE" ] || save_token "$tok"
   fi
 
-  git clone --quiet "https://x-access-token:${tok}@github.com/${REPO_OWNER}/${REPO_NAME}.git" "$APP_DIR" \
+  timeout 300 git clone --quiet "https://x-access-token:${tok}@github.com/${REPO_OWNER}/${REPO_NAME}.git" "$APP_DIR" \
     || die "Clone failed — token galat ya expire ho gaya"
   ok "Cloned into $APP_DIR"
 }
@@ -149,9 +149,18 @@ pid_alive() {
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
 }
 
-healthy() { curl -fsS -o /dev/null "http://127.0.0.1:$1/" 2>/dev/null; }
+# Every network probe is time-boxed: a process can hold the port and never
+# answer, and a 1-second auto-update loop must not sit inside a hung curl.
+healthy() { curl -fsS --connect-timeout 2 --max-time 4 -o /dev/null "http://127.0.0.1:$1/" 2>/dev/null; }
 
-running() { pid_alive && [ "$(server_port)" = "$PORT" ] && healthy "$PORT"; }
+identity() {   # -> app name served on the port, empty when it is not unbg
+  curl -fsS --connect-timeout 2 --max-time 4 "http://127.0.0.1:$1/version.json" 2>/dev/null \
+    | tr -d '\n ' | grep -o '"app":"[^"]*"' | head -1 | cut -d'"' -f4
+}
+
+port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") >/dev/null 2>&1; }
+
+serving_unbg() { [ "$(identity "$1")" = "unbg" ]; }
 
 is_termux() { [ -n "${PREFIX:-}" ] && [ -d "$PREFIX/bin" ]; }
 
@@ -195,12 +204,21 @@ notify_live() {
 }
 
 start_server() {
-  if running; then
-    ok "Server already running (pid $(server_pid)) on port $PORT"
+  say "Checking port $PORT…"
+  if serving_unbg "$PORT"; then
+    ok "unbg already live on port $PORT (pid $(server_pid || echo "—"))"
   else
+    if port_open "$PORT"; then
+      die "port $PORT par koi DOOSRA app chal raha hai — /version.json se unbg confirm nahi hua.
+   title: $(curl -fsS --connect-timeout 2 --max-time 4 "http://127.0.0.1:$PORT/" 2>/dev/null | grep -o '<title>[^<]*' | head -1 | cut -c8-)
+   Do options:  us app ko band karo,  ya  UNBG_PORT=4322 unbg
+   Detail:      unbg doctor"
+    fi
     if pid_alive; then
-      warn "Old instance on port $(server_port) — restarting on $PORT"
-      kill "$(server_pid)" 2>/dev/null; pkill -f "[a]stro dev" 2>/dev/null || true; sleep 1
+      warn "Purana instance (pid $(server_pid)) saaf kar raha hoon…"
+      kill "$(server_pid)" 2>/dev/null || true
+      pkill -f "astro dev.*--port $(server_port)" 2>/dev/null || true
+      sleep 1
     fi
     say "Starting supervisor on port $PORT…"
     # The supervisor keeps the dev server alive *and* pulls new commits from
@@ -213,10 +231,13 @@ start_server() {
     nohup env UNBG_DIR="$APP_DIR" UNBG_PORT="$PORT" UNBG_CHECK_INTERVAL="$interval" \
       UNBG_LOG="$LOG_FILE" bash "$APP_DIR/scripts/unbg-watch.sh" >>"$LOG_FILE" 2>&1 &
     echo "$! $PORT" >"$PID_FILE"
-    for _ in $(seq 1 40); do
+    printf '   waiting for the dev server'
+    for _ in $(seq 1 60); do
       sleep 0.5
-      if healthy "$PORT"; then break; fi
+      printf '.'
+      if serving_unbg "$PORT"; then printf ' up\n'; break; fi
     done
+    printf '\n'
   fi
 
   command -v termux-wake-lock >/dev/null && termux-wake-lock 2>/dev/null || true
@@ -259,8 +280,8 @@ case "${1:-start}" in
     elif is_termux; then
       warn "Autostart not installed — run: unbg"
     fi
-    if running; then
-      ok "Running (pid $(server_pid)) on http://localhost:$PORT"
+    if serving_unbg "$PORT"; then
+      ok "Running (pid $(server_pid || echo —)) on http://localhost:$PORT"
       ok "Auto-update: checks GitHub every ${UNBG_CHECK_INTERVAL:-$(cat "$HOME/.unbg-interval" 2>/dev/null || echo 1)}s"
     else
       warn "Not running — start with: unbg"
@@ -273,7 +294,7 @@ case "${1:-start}" in
   stop)
     if pid_alive; then
       kill "$(server_pid)" 2>/dev/null
-      pkill -f "astro dev" 2>/dev/null || true
+      pkill -f "astro dev.*--port $(server_port || echo "$PORT")" 2>/dev/null || true
       rm -f "$PID_FILE"
       ok "Stopped"
     else

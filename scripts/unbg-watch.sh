@@ -68,7 +68,7 @@ start_child() {
 remote_sha() {
   local tok; tok="$(token)"
   [ -n "$tok" ] || return 1
-  git ls-remote --heads "https://x-access-token:${tok}@github.com/vishubizzonl-ship-it/unbg.git" "$BRANCH" 2>/dev/null \
+  timeout 20 git ls-remote --heads "https://x-access-token:${tok}@github.com/vishubizzonl-ship-it/unbg.git" "$BRANCH" 2>/dev/null \
     | awk '{print $1}'
 }
 
