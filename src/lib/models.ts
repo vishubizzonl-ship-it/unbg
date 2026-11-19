@@ -36,10 +36,22 @@ export interface BgModel {
    * Which runtime serves this entry. `imgly` runs @imgly/background-removal in a
    * Web Worker (its own ONNX + wasm bundle), so it skips the transformers path.
    */
-  engine?: 'transformers' | 'imgly';
+  engine?: 'transformers' | 'imgly' | 'puter';
 }
 
 export const MODELS: BgModel[] = [
+  {
+    id: 'puter/image-edit',
+    label: 'Puter.js — no key, user pays',
+    note: 'Puter ke image model se edit — sign-in ek baar, aapke credits; edges par baaki models se kamzor',
+    license: 'Puter terms',
+    licenseOk: true,
+    sizeMb: 0,
+    speed: 'slow',
+    scope: 'general',
+    dtype: 'uint8',
+    engine: 'puter',
+  },
   {
     id: 'imgly/isnet-quint8',
     label: 'IMG.LY isnet — Web Worker',

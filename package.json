@@ -10,7 +10,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "test": "npx --yes esbuild src/lib/mask.ts --format=esm --outfile=dist-test/mask.js --log-level=error && npx --yes esbuild src/lib/decode.ts --format=esm --outfile=dist-test/decode.js --log-level=error && npx --yes esbuild src/lib/remove-bg.ts --bundle --format=esm --platform=node --external:@huggingface/transformers --outfile=dist-test/remove-bg.js --log-level=error && npx --yes esbuild src/workers/imgly.worker.ts --bundle --format=esm --platform=node --alias:@imgly/background-removal=./tests/stubs/imgly-stub.mjs --outfile=dist-test/imgly-worker.mjs --log-level=error && node --test tests/mask.test.mjs tests/decode.test.mjs tests/errors.test.mjs tests/imgly-worker.test.mjs"
+    "test": "npx --yes esbuild src/lib/mask.ts --format=esm --outfile=dist-test/mask.js --log-level=error && npx --yes esbuild src/lib/decode.ts --format=esm --outfile=dist-test/decode.js --log-level=error && npx --yes esbuild src/lib/remove-bg.ts --bundle --format=esm --platform=node --external:@huggingface/transformers --outfile=dist-test/remove-bg.js --log-level=error && npx --yes esbuild src/lib/puter.ts --format=esm --outfile=dist-test/puter.js --log-level=error && npx --yes esbuild src/workers/imgly.worker.ts --bundle --format=esm --platform=node --alias:@imgly/background-removal=./tests/stubs/imgly-stub.mjs --outfile=dist-test/imgly-worker.mjs --log-level=error && node --test tests/mask.test.mjs tests/decode.test.mjs tests/errors.test.mjs tests/imgly-worker.test.mjs tests/puter.test.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",

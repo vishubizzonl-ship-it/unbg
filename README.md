@@ -247,6 +247,19 @@ Hugging Face path uploads to the BiRefNet demo Space, queues the named endpoint,
 reads the SSE stream and downloads the PNG — every failure has its own sentence
 (401 bad token, quota/queue error, no output, network).
 
+### Puter.js — no key, the visitor pays
+
+`Puter.js — no key, user pays` loads `https://js.puter.com/v2/` lazily and asks one
+of Puter's image-editing models to remove the background (`puter.ai.txt2img` with
+`input_images`). The visitor signs in to Puter once and their own credits cover
+the call: no key on our side, no backend, nothing to configure.
+
+Trade-offs stated plainly in the UI: it is a *generative* edit, so it is the
+weakest of the three engines on hair and thin edges, it can redraw the subject
+slightly, and transparency is not guaranteed — the status line reports the share
+of pixels that really became transparent so the result is never oversold. When
+that share is low, the app says to use the on-device or remove.bg engine.
+
 ### IMG.LY — the worker engine
 
 `@imgly/background-removal` (v1.7.0) is in the model list as

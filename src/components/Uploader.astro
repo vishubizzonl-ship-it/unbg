@@ -183,6 +183,7 @@ import { PROVIDERS } from '../lib/cloud';
   import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, type BgModel } from '../lib/models';
   import { decodeImage, removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
   import { removeBackgroundImgly, IMGLY_MODEL_ID } from '../lib/imgly';
+  import { removeBackgroundPuter, puterError, PUTER_MODEL_ID } from '../lib/puter';
   import {
     isCloudModel,
     cloudProvider,
@@ -272,6 +273,12 @@ import { PROVIDERS } from '../lib/cloud';
         return;
       }
       const m = model();
+      if (m.engine === 'puter') {
+        note.textContent = `${m.note} · license: ${m.license}`;
+        note.className = 'mt-xxs text-caption-mono text-body';
+        syncCloudBlock();
+        return;
+      }
       if (m.engine === 'imgly') {
         note.textContent = `${m.note} · ~${m.sizeMb} MB · license: ${m.license}`;
         note.className = 'mt-xxs text-caption-mono text-body';
@@ -364,6 +371,23 @@ import { PROVIDERS } from '../lib/cloud';
           return;
         }
 
+        if (select.value === PUTER_MODEL_ID) {
+          const out = await removeBackgroundPuter(file, ({ message }) => setStatus(message));
+          if (afterUrl) URL.revokeObjectURL(afterUrl);
+          afterUrl = URL.createObjectURL(out.blob);
+          after.src = afterUrl;
+          download.href = afterUrl;
+          download.setAttribute('download', 'unbg-puter.png');
+          timing.textContent = `Puter · ${out.width}×${out.height} · ${out.transparentPct}% transparent`;
+          addBench('Puter (cloud, user pays)', 'cloud', 0, 0);
+          setStatus(
+            out.transparentPct > 5
+              ? `Done — Puter ne background hata diya (${out.transparentPct}% pixels transparent).`
+              : 'Puter ne image di par background poora transparent nahi hua — accurate cutout ke liye on-device ya remove.bg model chuno.',
+          );
+          return;
+        }
+
         if (select.value === IMGLY_MODEL_ID) {
           const out = await removeBackgroundImgly(file, 'isnet_quint8', (percent, label) =>
             setStatus(`${label}… ${percent}%`),
@@ -402,7 +426,11 @@ import { PROVIDERS } from '../lib/cloud';
         setStatus(`Done — ${fmt(out.inferMs)} inference, full resolution PNG ready.`);
       } catch (error) {
         const message =
-          error instanceof CloudError ? error.message : friendlyError(error, model().label);
+          error instanceof CloudError
+            ? error.message
+            : select.value === PUTER_MODEL_ID
+              ? puterError(error)
+              : friendlyError(error, model().label);
         setStatus(`Failed: ${message}`, 'error');
       } finally {
         busy = false;
