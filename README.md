@@ -64,6 +64,29 @@ and opens the browser. No `git pull`, no `npm install` by hand.
 | `unbg stop` / `unbg restart` | obvious |
 | `unbg update` | pull + reinstall, no start |
 
+### Live auto-update (no deploy needed)
+
+`unbg` starts a **supervisor** (`scripts/unbg-watch.sh`), not a bare dev server:
+
+```
+unbg  ──▶  supervisor (nohup, detached)
+             ├─ child: astro dev  (restarted automatically if it dies)
+             └─ timer: every UNBG_CHECK_INTERVAL s (default 180)
+                  git fetch origin main
+                  ├─ new commit, code files only → fast-forward; Astro's HMR
+                  │                               picks it up, server untouched
+                  └─ package.json / lockfile / astro.config changed → npm install
+                                                       + restart child
+```
+
+So the site stays **live on localhost the whole time** and follows `main` by itself —
+no deploy, no manual `git pull`, no restart. Progress is logged to
+`~/.unbg-server.log` (`unbg logs`).
+
+```bash
+UNBG_CHECK_INTERVAL=60 unbg restart    # check every minute instead of 3
+```
+
 ### Zero-command mode (Termux:Boot + widget)
 
 `unbg` installs two extra entry points on Termux, so after the one-time setup you

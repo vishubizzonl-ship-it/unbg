@@ -189,10 +189,11 @@ start_server() {
       warn "Old instance on port $(server_port) — restarting on $PORT"
       kill "$(server_pid)" 2>/dev/null; pkill -f "[a]stro dev" 2>/dev/null || true; sleep 1
     fi
-    say "Starting dev server on port $PORT…"
-    # Detached restart loop: if the dev server ever crashes, it comes back.
-    nohup bash -c "cd '$APP_DIR' && while true; do npm run dev -- --host 0.0.0.0 --port $PORT --force; sleep 2; done" \
-      >"$LOG_FILE" 2>&1 &
+    say "Starting supervisor on port $PORT…"
+    # The supervisor keeps the dev server alive *and* pulls new commits from
+    # GitHub on a timer, so the site stays live and current without deploying.
+    nohup env UNBG_DIR="$APP_DIR" UNBG_PORT="$PORT" UNBG_CHECK_INTERVAL="${UNBG_CHECK_INTERVAL:-180}" \
+      UNBG_LOG="$LOG_FILE" bash "$APP_DIR/scripts/unbg-watch.sh" >>"$LOG_FILE" 2>&1 &
     echo "$! $PORT" >"$PID_FILE"
     for _ in $(seq 1 40); do
       sleep 0.5
@@ -235,6 +236,7 @@ case "${1:-start}" in
     fi
     if running; then
       ok "Running (pid $(server_pid)) on http://localhost:$PORT"
+      ok "Auto-update: checks GitHub every ${UNBG_CHECK_INTERVAL:-180}s"
     else
       warn "Not running — start with: unbg"
     fi
