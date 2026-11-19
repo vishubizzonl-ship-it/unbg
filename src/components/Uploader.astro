@@ -2,6 +2,11 @@
 // The one client island on the site. Everything runs locally in the browser.
 import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
 import { PROVIDERS } from '../lib/cloud';
+
+// Two lists, deliberately separate: what runs in this browser, and what needs the
+// Python service in server/ (which a phone does not have).
+const ON_DEVICE_MODELS = MODELS.filter((m) => m.engine !== 'server');
+const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
 ---
 
 <div id="unbg-up" class="rounded-lg bg-canvas p-sm shadow-[var(--shadow-stack-3)]">
@@ -50,12 +55,17 @@ import { PROVIDERS } from '../lib/cloud';
       class="mt-xs w-full rounded-sm border border-hairline bg-canvas px-xs py-xxs font-mono text-body-sm text-ink"
     >
       {
-        MODELS.map((m) => (
+        ON_DEVICE_MODELS.map((m) => (
           <option value={m.id} selected={m.id === DEFAULT_MODEL_ID}>
             {m.label} · ~{m.sizeMb} MB {m.licenseOk ? '' : '· ⚠ non-commercial'}
           </option>
         ))
       }
+      <optgroup label="Apna server — PC/laptop par chalta hai, phone par nahi">
+        {SERVER_MODELS.map((m) => (
+          <option value={m.id}>{m.label} · server chahiye</option>
+        ))}
+      </optgroup>
       <optgroup label="Cloud — photo unke server par jaati hai">
         <option value="cloud:huggingface">{PROVIDERS.huggingface.label}</option>
         <option value="cloud:removebg">{PROVIDERS.removebg.label}</option>
@@ -126,6 +136,14 @@ import { PROVIDERS } from '../lib/cloud';
     class="mt-sm min-h-4 font-mono text-caption-mono text-body"
   >
   </p>
+  <button
+    id="up-fallback"
+    type="button"
+    hidden
+    class="mt-xxs inline-flex h-9 items-center rounded-pill border border-hairline px-sm font-mono text-caption-mono text-ink hover:bg-canvas-soft-2"
+  >
+    On-device model par switch karo
+  </button>
 
   <!-- result -->
   <div id="up-result" class="mt-sm" hidden>
@@ -257,6 +275,9 @@ import { PROVIDERS } from '../lib/cloud';
 
 <script>
   import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, type BgModel } from '../lib/models';
+
+  // Mirrors the frontmatter lists — the <script> runs in its own module scope.
+  const SERVER_MODEL_IDS = new Set(MODELS.filter((m) => m.engine === 'server').map((m) => m.id));
   import { decodeImage, removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
   import { removeBackgroundImgly, imglyModelFor, IMGLY_MODEL_PREFIX } from '../lib/imgly';
   import { refineCutout } from '../lib/refine';
@@ -292,6 +313,7 @@ import { PROVIDERS } from '../lib/cloud';
     const cleanToggle = $<HTMLInputElement>('up-clean')!;
     const note = $('up-note')!;
     const status = $('up-status')!;
+    const fallback = $<HTMLButtonElement>('up-fallback')!;
     const result = $('up-result')!;
     const before = $<HTMLImageElement>('up-before')!;
     const after = $<HTMLImageElement>('up-after')!;
@@ -394,6 +416,18 @@ import { PROVIDERS } from '../lib/cloud';
     $('up-bg-custom')!.addEventListener('click', () => void applyBackground(bgColor.value));
     bgColor.addEventListener('change', () => void applyBackground(bgColor.value));
 
+    // Label the server group with the truth as soon as the page loads.
+    async function markServerGroup() {
+      const group = select.querySelector('optgroup[label^="Apna server"]');
+      if (!group) return;
+      const health = await serverHealth();
+      group.label = health.ok
+        ? 'Apna server — mil gaya ✓ (PC/laptop)'
+        : 'Apna server — abhi band hai (PC/laptop par chalu karo)';
+    }
+
+    void markServerGroup();
+
     async function syncServerBlock() {
       serverBlock.hidden = !server();
       if (!server()) return;
@@ -462,7 +496,9 @@ import { PROVIDERS } from '../lib/cloud';
       }
       const m = model();
       if (m.engine === 'server') {
-        note.textContent = `${m.note} · license: ${m.license}`;
+        note.textContent =
+          `${m.note} · license: ${m.license} · ye model sirf aapke PC/laptop ke Python server par ` +
+          'chalta hai (phone par nahi). Server band hua to browser "Failed to fetch" dega.';
         note.className = 'mt-xxs text-caption-mono text-body';
         syncCloudBlock();
         void syncServerBlock();
@@ -496,6 +532,23 @@ import { PROVIDERS } from '../lib/cloud';
       void syncServerBlock();
     });
     updateNote();
+
+    /** Nudge the user back to something that works on this device. */
+    function offerFallback(show: boolean) {
+      fallback.hidden = !show;
+    }
+
+    fallback.addEventListener('click', () => {
+      const next = recommendedModelId(device);
+      select.value = next;
+      userPickedModel = true;
+      updateNote();
+      syncCloudBlock();
+      void syncServerBlock();
+      setStatus(`On-device model chuna: ${model().label} — dobara try karo.`);
+      fallback.hidden = true;
+      if (currentFile) void run(currentFile);
+    });
 
     function setStatus(message: string, tone: 'normal' | 'error' = 'normal') {
       status.textContent = message;
@@ -537,6 +590,7 @@ import { PROVIDERS } from '../lib/cloud';
       currentFile = file;
 
       result.hidden = false;
+      fallback.hidden = true;
       after.removeAttribute('src');
       compare.hidden = true;
       bgRow.hidden = true;
@@ -678,6 +732,9 @@ import { PROVIDERS } from '../lib/cloud';
                 ? puterError(error)
                 : friendlyError(error, model().label);
         setStatus(`Failed: ${message}`, 'error');
+        if (error instanceof ServerError || error instanceof CloudError) {
+          offerFallback(error.code === 'unreachable' || error.code === 'model_unavailable');
+        }
       } finally {
         busy = false;
         again.disabled = false;
