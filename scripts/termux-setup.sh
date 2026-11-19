@@ -89,6 +89,18 @@ sync_repo() {
     return 0
   fi
 
+  if [ -d "$APP_DIR" ] && [ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ]; then
+    if [ ! -d "$APP_DIR/.git" ]; then
+      die "$APP_DIR khali nahi hai aur git repo bhi nahi hai (koi doosra project?).
+   Use a different folder, e.g.:  UNBG_DIR=\$HOME/unbg-live unbg"
+    fi
+    if ! git -C "$APP_DIR" remote get-url origin 2>/dev/null | grep -q "$REPO_NAME"; then
+      die "$APP_DIR ka git remote hamara repo nahi hai:
+   $(git -C "$APP_DIR" remote get-url origin 2>/dev/null || echo '(none)')
+   Use a different folder, e.g.:  UNBG_DIR=\$HOME/unbg-live unbg"
+    fi
+  fi
+
   say "Cloning $REPO_OWNER/$REPO_NAME…"
   mkdir -p "$(dirname "$APP_DIR")"
 
@@ -276,6 +288,44 @@ case "${1:-start}" in
     PORT="${UNBG_PORT:-4321}"
     export UNBG_CHECK_INTERVAL="$local_s"
     "$0" restart
+    ;;
+  doctor)
+    echo "── unbg doctor ─────────────────────────────"
+    echo "app folder : $APP_DIR"
+    if [ -d "$APP_DIR/.git" ]; then
+      echo "git remote : $(git -C "$APP_DIR" remote get-url origin 2>/dev/null | sed 's/x-access-token:[^@]*@//')"
+      echo "commit     : $(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null) ($(git -C "$APP_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null))"
+      echo "dirty files: $(git -C "$APP_DIR" status --porcelain 2>/dev/null | wc -l)"
+    else
+      warn "app folder is not a git checkout — ye hamara repo nahi lagta"
+    fi
+    echo "node       : $(node -v 2>/dev/null) · npm $(npm -v 2>/dev/null)"
+    echo "interval   : ${UNBG_CHECK_INTERVAL:-$(cat "$HOME/.unbg-interval" 2>/dev/null || echo 1)}s"
+    if pid_alive; then
+      echo "supervisor : pid $(server_pid) → port $(server_port)"
+    else
+      warn "supervisor not running"
+    fi
+
+    echo "── what port $PORT actually serves ─────────"
+    body=""
+    body="$(curl -fsS --max-time 5 "http://127.0.0.1:$PORT/version.json" 2>/dev/null || true)"
+    if [ -z "$body" ]; then
+      if curl -fsS -o /dev/null --max-time 5 "http://127.0.0.1:$PORT/" 2>/dev/null; then
+        warn "port $PORT par kuch chal raha hai, par /version.json nahi hai → ye unbg NAHI hai"
+        echo "   title: $(curl -fsS --max-time 5 "http://127.0.0.1:$PORT/" 2>/dev/null | grep -o '<title>[^<]*' | head -1 | cut -c8-)"
+        echo "   fix  : unbg stop  &&  unbg"
+      else
+        warn "port $PORT par kuch nahi chal raha — start karo: unbg"
+      fi
+    else
+      echo "$body" | head -12
+      if echo "$body" | grep -q '"app": *"unbg"'; then
+        ok "ye hamara unbg hai — sab theek"
+      else
+        die "port $PORT par doosra app chal raha hai — buffering/caching clear karke 'unbg restart' karo"
+      fi
+    fi
     ;;
   autostart)
     if is_termux; then

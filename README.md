@@ -87,6 +87,27 @@ no deploy, no manual `git pull`, no restart. Progress is logged to
 UNBG_CHECK_INTERVAL=60 unbg restart    # check every minute instead of 3
 ```
 
+### Something else is on port 4321?
+
+Other background-remover projects can hold the same port, and a screenshot cannot
+prove which codebase is serving. Two tools exist for this:
+
+```bash
+curl -s localhost:4321/version.json   # {"app":"unbg", ...} = the real thing
+unbg doctor                           # folder, remote, commit, port, verdict
+```
+
+`unbg doctor` prints the app folder, git remote, HEAD, supervisor pid/port, then
+fetches `/version.json` from the port and tells you whether it is unbg or a
+foreign app (including its `<title>`), so the fix is one line:
+
+```bash
+unbg stop && unbg
+```
+
+The launcher also refuses to clone into a folder that already holds another
+project, and points at `UNBG_DIR=$HOME/unbg-live unbg` instead of overwriting it.
+
 ### Poll rate — down to one second
 
 ```bash
