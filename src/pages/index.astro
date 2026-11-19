@@ -1,96 +1,361 @@
 ---
-import Layout from '../layouts/Layout.astro';
+import Base from '../layouts/Base.astro';
+import Hero from '../components/Hero.astro';
+import CodeBlock from '../components/CodeBlock.astro';
+import Faq from '../components/Faq.astro';
 
-const stack = [
-  { name: 'Astro 7', detail: 'Island architecture, zero JS by default', tag: 'framework' },
-  { name: 'Tailwind CSS 4', detail: 'CSS-first config, @tailwindcss/vite plugin', tag: 'styling' },
-  { name: 'Vercel Design', detail: 'DESIGN.md tokens — ink on near-white canvas', tag: 'design' },
-  { name: 'Astro Docs MCP', detail: 'Live docs via mcp.docs.astro.build', tag: 'ai' },
+const differentiators = [
+  {
+    title: 'No account, no watermark',
+    body: 'Upload, remove, download. Full resolution on the first try — no signup wall, no credit arithmetic, no logo stamped on your work.',
+    tag: 'free',
+  },
+  {
+    title: 'On-device mode',
+    body: 'Run the model inside your browser. The image never leaves your machine — verifiable in devtools, which is what privacy promises should be.',
+    tag: 'private',
+  },
+  {
+    title: 'Batch that is actually free',
+    body: 'Drop up to 50 images, watch one queue, collect a single ZIP with a CSV manifest. No plan upgrade to get through a product catalogue.',
+    tag: 'batch',
+  },
+  {
+    title: 'Edges you can fix',
+    body: 'Undo history, before/after scrub and a feather brush for hair and fur. The cutout is a starting point, not a locked-in guess.',
+    tag: 'editor',
+  },
+  {
+    title: 'Output presets',
+    body: 'Transparent PNG, white marketplace background, your brand colour, or a generated backdrop — plus Amazon, Etsy, Instagram and passport sizes.',
+    tag: 'presets',
+  },
+  {
+    title: 'Built for scripts',
+    body: 'One documented endpoint, honest rate limits, a playground with no signup, and webhooks when a job finishes. Boring in the best way.',
+    tag: 'api',
+  },
 ];
 
-const skills = [
-  { name: 'web-design-guidelines', from: 'vercel-labs/agent-skills' },
-  { name: 'tailwind-4-docs', from: 'lombiq/tailwind-agent-skills' },
+const steps = [
+  {
+    n: '01',
+    title: 'Drop it',
+    body: 'Drag a file, paste from the clipboard, or hand us a URL. JPG, PNG, WebP, HEIC and AVIF up to 25 MB.',
+  },
+  {
+    n: '02',
+    title: 'Cut it out',
+    body: 'Either the on-device model (private, no upload) or the cloud model (best edges on complex hair and glass).',
+  },
+  {
+    n: '03',
+    title: 'Take it',
+    body: 'Download a full-resolution PNG, apply a background preset, or push the whole batch to a ZIP.',
+  },
+];
+
+const presets = [
+  'Transparent PNG',
+  'White — marketplaces',
+  'Brand colour',
+  'Generated backdrop',
+  'Amazon 2000px',
+  'Etsy 2000px',
+  'Instagram 1080px',
+  'Passport 35×45mm',
+  'WebP · AVIF',
+  'Target file size',
+];
+
+const useCases = [
+  {
+    title: 'E-commerce catalogues',
+    body: 'Cut every product onto a clean white canvas, batch-process by folder, export at marketplace dimensions.',
+    meta: 'batch · presets',
+  },
+  {
+    title: 'Photographers',
+    body: 'Hair and fur edges with a feather brush, then a transparent PNG straight into your retouching flow.',
+    meta: 'on-device · privacy',
+  },
+  {
+    title: 'Passport & ID photos',
+    body: 'Plain background, correct physical dimensions, print-ready output — without uploading your face to a stranger.',
+    meta: 'private · size presets',
+  },
+  {
+    title: 'Developers',
+    body: 'One POST, one binary back. Sandbox keys, predictable limits, and webhooks for long batches.',
+    meta: 'api · webhooks',
+  },
+];
+
+const compare = [
+  { feature: 'Full-resolution output, free', unbg: 'Yes', other: 'Preview only / credits' },
+  { feature: 'Account required', unbg: 'Never', other: 'Yes for HD' },
+  { feature: 'Watermark', unbg: 'None', other: 'None' },
+  { feature: 'Batch on free tier', unbg: 'Up to 50', other: 'Paid plan' },
+  { feature: 'Runs on your device', unbg: 'Yes — opt-in', other: 'No' },
+  { feature: 'Image used for model training', unbg: 'Never', other: 'Opt-in prompt' },
+  { feature: 'API pricing on the page', unbg: 'Public table', other: 'Contact sales' },
+];
+
+const apiCode = `<span class="text-white/60"># remove a background — no signup needed for the first 100 calls</span>
+curl -X POST https://api.unbg.dev/v1/remove \\
+  -H "Authorization: Bearer $UNBG_KEY" \\
+  -F "image=@product.jpg" \\
+  -F "preset=white" \\
+  -o product-cutout.png`;
+
+const faqs = [
+  {
+    q: 'Is it really free without an account?',
+    a: 'Yes. The tool runs without signup and the download is full resolution. A key only becomes necessary for batches above the free allowance or for API automation.',
+  },
+  {
+    q: 'What does “on-device” mean exactly?',
+    a: 'The segmentation model is downloaded once into your browser and executed locally with WebGPU (CPU fallback). Your image is not uploaded — you can confirm it in the network tab.',
+  },
+  {
+    q: 'Do you keep my images?',
+    a: 'On-device images never reach us. Cloud-mode images are deleted within 24 hours and are never used for training. There is no “contribute this image” prompt to mis-click.',
+  },
+  {
+    q: 'Which formats and sizes are supported?',
+    a: 'JPG, PNG, WebP, AVIF and HEIC up to 25 MB per image. Output: PNG with alpha, JPG, WebP or AVIF, with an optional target file size.',
+  },
+  {
+    q: 'Why not just wait for the Canva migration?',
+    a: 'Because credits, seats and platform lock-in are not a background remover. unbg stays a single-purpose tool: one image in, one clean cutout out.',
+  },
 ];
 ---
 
-<Layout title="unbg — Astro + Tailwind 4">
-  <main class="mx-auto max-w-5xl px-6 pb-24">
-    <!-- hero -->
-    <section class="relative pt-24 pb-16">
-      <div
-        class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-64 opacity-40 blur-3xl"
-        style="background-image: radial-gradient(at 20% 40%, #007cf0 0px, transparent 55%), radial-gradient(at 50% 10%, #7928ca 0px, transparent 50%), radial-gradient(at 75% 45%, #ff0080 0px, transparent 50%), radial-gradient(at 90% 25%, #f9cb28 0px, transparent 45%);"
-      >
-      </div>
+<Base>
+  <main id="main">
+    <Hero />
 
-      <p class="mb-5 font-mono text-xs tracking-widest text-[#888888] uppercase">
-        unbg · setup complete
-      </p>
-      <h1
-        class="max-w-3xl text-5xl font-semibold tracking-[-2.4px] text-balance sm:text-6xl"
-      >
-        Astro, Tailwind 4 aur agent skills — sab ready.
-      </h1>
-      <p class="mt-6 max-w-xl text-lg leading-7 text-[#4d4d4d]">
-        Ye page isliye bana hai taaki pura toolchain verify ho jaye: build, styles,
-        design tokens, skills aur docs MCP.
-      </p>
+    <!-- differentiators -->
+    <section aria-labelledby="why-title" class="border-t border-hairline">
+      <div class="mx-auto max-w-[1200px] px-lg py-3xl lg:py-4xl">
+        <div class="flex flex-col gap-sm sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="font-mono text-caption-mono tracking-wider text-mute-ink uppercase">Why unbg</p>
+            <h2 id="why-title" class="mt-xs text-display-lg text-ink">
+              Six things the old tools made you pay for.
+            </h2>
+          </div>
+          <p class="max-w-[34ch] text-body-sm text-body sm:text-right">
+            Feature-for-feature parity, minus the credit system, the login wall and the data
+            trade.
+          </p>
+        </div>
 
-      <div class="mt-8 flex flex-wrap items-center gap-3">
-        <a
-          href="https://docs.astro.build/en/getting-started/"
-          class="rounded-full bg-[#171717] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#383838]"
-        >
-          Astro docs
-        </a>
-        <a
-          href="https://tailwindcss.com/docs"
-          class="rounded-full border border-[#ebebeb] px-5 py-2.5 text-sm font-medium transition hover:border-[#a1a1a1]"
-        >
-          Tailwind docs
-        </a>
+        <ul class="mt-xl grid gap-px overflow-hidden rounded-lg bg-hairline sm:grid-cols-2 lg:grid-cols-3">
+          {
+            differentiators.map((item) => (
+              <li class="bg-canvas p-lg">
+                <div class="flex items-baseline justify-between gap-sm">
+                  <h3 class="text-body-md font-medium text-ink">{item.title}</h3>
+                  <span class="font-mono text-caption-mono tracking-wider text-mute-ink uppercase">
+                    {item.tag}
+                  </span>
+                </div>
+                <p class="mt-xs text-body-sm text-body">{item.body}</p>
+              </li>
+            ))
+          }
+        </ul>
       </div>
     </section>
 
-    <!-- stack grid -->
-    <section class="border-t border-[#ebebeb] pt-12">
-      <h2 class="text-xs font-medium tracking-widest text-[#888888] uppercase">Installed</h2>
-      <ul class="mt-6 grid gap-px overflow-hidden rounded-xl bg-[#ebebeb] sm:grid-cols-2">
-        {
-          stack.map((item) => (
-            <li class="bg-white p-6">
-              <div class="flex items-baseline justify-between gap-3">
-                <h3 class="text-base font-semibold tracking-[-0.4px]">{item.name}</h3>
-                <span class="font-mono text-[10px] tracking-wider text-[#888888] uppercase">
-                  {item.tag}
-                </span>
-              </div>
-              <p class="mt-2 text-sm leading-6 text-[#4d4d4d]">{item.detail}</p>
-            </li>
-          ))
-        }
-      </ul>
+    <!-- how it works -->
+    <section id="how" aria-labelledby="how-title" class="bg-canvas-soft">
+      <div class="mx-auto max-w-[1200px] px-lg py-3xl lg:py-4xl">
+        <p class="font-mono text-caption-mono tracking-wider text-mute-ink uppercase">How it works</p>
+        <h2 id="how-title" class="mt-xs text-display-lg text-ink">Three steps. No dialogue boxes.</h2>
+
+        <ol class="mt-xl grid gap-lg md:grid-cols-3">
+          {
+            steps.map((step) => (
+              <li class="rounded-md border border-hairline bg-canvas p-lg shadow-[var(--shadow-stack-1)]">
+                <p class="font-mono text-caption-mono text-mute-ink">{step.n}</p>
+                <h3 class="mt-sm text-display-sm text-ink">{step.title}</h3>
+                <p class="mt-xs text-body-sm text-body">{step.body}</p>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
     </section>
 
-    <!-- skills -->
-    <section class="mt-12 border-t border-[#ebebeb] pt-12">
-      <h2 class="text-xs font-medium tracking-widest text-[#888888] uppercase">Agent skills</h2>
-      <div class="mt-6 flex flex-wrap gap-3">
-        {
-          skills.map((skill) => (
-            <div class="rounded-lg border border-[#ebebeb] px-4 py-3">
-              <p class="font-mono text-sm">{skill.name}</p>
-              <p class="mt-1 text-xs text-[#888888]">{skill.from}</p>
+    <!-- presets -->
+    <section id="presets" aria-labelledby="presets-title" class="border-y border-hairline">
+      <div class="mx-auto max-w-[1200px] px-lg py-3xl lg:py-4xl">
+        <div class="grid gap-2xl lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div>
+            <p class="font-mono text-caption-mono tracking-wider text-mute-ink uppercase">Output</p>
+            <h2 id="presets-title" class="mt-xs text-display-lg text-ink">
+              A cutout is only useful once it fits the destination.
+            </h2>
+            <p class="mt-md max-w-[46ch] text-body-md text-body">
+              Pick the background and the exact dimensions your marketplace, printer or feed
+              expects — in the same step as the removal.
+            </p>
+          </div>
+
+          <ul class="flex flex-wrap gap-xs">
+            {
+              presets.map((preset) => (
+                <li class="rounded-full border border-hairline bg-canvas px-sm py-xs text-body-sm text-body transition-colors hover:border-hairline-strong hover:text-ink">
+                  {preset}
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- use cases -->
+    <section id="use-cases" aria-labelledby="use-title">
+      <div class="mx-auto max-w-[1200px] px-lg py-3xl lg:py-4xl">
+        <div class="flex flex-col gap-sm sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="font-mono text-caption-mono tracking-wider text-mute-ink uppercase">Use cases</p>
+            <h2 id="use-title" class="mt-xs text-display-lg text-ink">
+              Built around the job, not the feature list.
+            </h2>
+          </div>
+        </div>
+
+        <ul class="mt-xl grid gap-lg sm:grid-cols-2">
+          {
+            useCases.map((item) => (
+              <li class="group rounded-lg border border-hairline bg-canvas p-lg transition-shadow hover:shadow-[var(--shadow-stack-2)]">
+                <div class="flex flex-wrap items-baseline justify-between gap-x-md gap-y-xxs">
+                  <h3 class="min-w-0 text-display-sm text-ink">{item.title}</h3>
+                  <span class="font-mono text-caption-mono text-mute-ink">{item.meta}</span>
+                </div>
+                <p class="mt-sm text-body-sm text-body">{item.body}</p>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
+
+    <!-- api -->
+    <section id="api" aria-labelledby="api-title" class="bg-ink text-white">
+      <div class="mx-auto grid max-w-[1200px] gap-2xl px-lg py-3xl lg:grid-cols-2 lg:items-center lg:py-4xl">
+        <div>
+          <p class="font-mono text-caption-mono tracking-wider text-white/65 uppercase">
+            API
+          </p>
+          <h2 id="api-title" class="mt-xs text-display-lg text-white">
+            One endpoint. Predictable limits.
+          </h2>
+          <p class="mt-md max-w-[46ch] text-body-md text-white/70">
+            Multipart POST in, PNG bytes out. Playground open without signup, documented rate
+            limits, and webhooks for batches that take longer than a request.
+          </p>
+
+          <dl class="mt-xl grid grid-cols-2 gap-lg sm:grid-cols-3">
+            <div>
+              <dt class="font-mono text-caption-mono text-white/60 uppercase">p50</dt>
+              <dd class="mt-xxs font-mono text-display-sm text-white">0.9s</dd>
             </div>
-          ))
-        }
+            <div>
+              <dt class="font-mono text-caption-mono text-white/60 uppercase">free tier</dt>
+              <dd class="mt-xxs font-mono text-display-sm text-white">100/mo</dd>
+            </div>
+            <div>
+              <dt class="font-mono text-caption-mono text-white/60 uppercase">failure</dt>
+              <dd class="mt-xxs font-mono text-display-sm text-white">retry ×3</dd>
+            </div>
+          </dl>
+
+          <a
+            href="#start"
+            class="mt-xl inline-flex h-12 items-center rounded-pill bg-white px-lg text-button-lg text-ink transition-colors hover:bg-canvas-soft-2"
+          >
+            Open the playground
+          </a>
+        </div>
+
+        <CodeBlock code={apiCode} label="quickstart" dark />
       </div>
     </section>
 
-    <footer class="mt-16 flex flex-wrap items-center justify-between gap-2 border-t border-[#ebebeb] pt-6 text-xs text-[#888888]">
-      <span class="font-mono">unbg</span>
-      <span>Built with Astro · Tailwind CSS 4</span>
-    </footer>
+    <!-- comparison -->
+    <section aria-labelledby="compare-title">
+      <div class="mx-auto max-w-[1200px] px-lg py-3xl lg:py-4xl">
+        <p class="font-mono text-caption-mono tracking-wider text-mute-ink uppercase">Comparison</p>
+        <h2 id="compare-title" class="mt-xs text-display-lg text-ink">
+          The honest table.
+        </h2>
+
+        <div class="mt-xl overflow-x-auto">
+          <table class="w-full border-collapse text-left">
+            <caption class="sr-only">
+              unbg compared with a typical credit-based background remover
+            </caption>
+            <thead>
+              <tr class="border-b border-hairline">
+                <th scope="col" class="py-sm pr-lg font-mono text-caption-mono tracking-wider text-mute-ink uppercase">
+                  Feature
+                </th>
+                <th scope="col" class="py-sm pr-lg font-mono text-caption-mono tracking-wider text-ink uppercase">
+                  unbg
+                </th>
+                <th scope="col" class="py-sm font-mono text-caption-mono tracking-wider text-mute-ink uppercase">
+                  Typical credit-based tool
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {
+                compare.map((row) => (
+                  <tr class="border-b border-hairline">
+                    <th scope="row" class="py-sm pr-lg text-body-sm font-normal text-body">
+                      {row.feature}
+                    </th>
+                    <td class="py-sm pr-lg text-body-sm font-medium text-ink">{row.unbg}</td>
+                    <td class="py-sm text-body-sm text-mute-ink">{row.other}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- faq -->
+    <section id="faq" aria-labelledby="faq-title" class="border-t border-hairline bg-canvas-soft">
+      <div class="mx-auto max-w-[1200px] px-lg py-3xl lg:py-4xl">
+        <h2 id="faq-title" class="text-display-lg text-ink">Questions worth asking.</h2>
+        <div class="mt-xl">
+          <Faq items={faqs} />
+        </div>
+      </div>
+    </section>
+
+    <!-- closing cta -->
+    <section class="border-t border-hairline">
+      <div class="mx-auto flex max-w-[1200px] flex-col items-start gap-lg px-lg py-3xl sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-display-md text-ink">Remove a background right now.</h2>
+          <p class="mt-xs text-body-sm text-body">No account. No credits. No watermark.</p>
+        </div>
+        <a
+          href="#start"
+          class="inline-flex h-12 items-center rounded-pill bg-ink px-lg text-button-lg text-white transition-colors hover:bg-[#383838]"
+        >
+          Start free
+        </a>
+      </div>
+    </section>
   </main>
-</Layout>
+</Base>

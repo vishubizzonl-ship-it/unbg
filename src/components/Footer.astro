@@ -1,0 +1,87 @@
+---
+const columns = [
+  {
+    title: 'Product',
+    links: [
+      { label: 'Remove background', href: '#start' },
+      { label: 'Batch', href: '#start' },
+      { label: 'Presets', href: '#presets' },
+      { label: 'Pricing', href: '#presets' },
+    ],
+  },
+  {
+    title: 'Use cases',
+    links: [
+      { label: 'E-commerce', href: '#use-cases' },
+      { label: 'Photographers', href: '#use-cases' },
+      { label: 'Passport photo', href: '#use-cases' },
+      { label: 'Developers', href: '#api' },
+    ],
+  },
+  {
+    title: 'Developers',
+    links: [
+      { label: 'API overview', href: '#api' },
+      { label: 'Quickstart', href: '#api' },
+      { label: 'Rate limits', href: '#api' },
+      { label: 'Status', href: '#api' },
+    ],
+  },
+  {
+    title: 'Company',
+    links: [
+      { label: 'FAQ', href: '#faq' },
+      { label: 'Privacy', href: '#faq' },
+      { label: 'Terms', href: '#faq' },
+      { label: 'Contact', href: '#faq' },
+    ],
+  },
+];
+
+const year = new Date().getFullYear();
+---
+
+<footer class="border-t border-hairline bg-canvas">
+  <div class="mx-auto max-w-[1200px] px-lg py-3xl">
+    <div class="grid gap-2xl sm:grid-cols-2 lg:grid-cols-5">
+      <div class="lg:col-span-1">
+        <a href="/" class="flex items-center gap-xs" aria-label="unbg — home">
+          <span aria-hidden="true" class="size-2 rounded-xs bg-ink"></span>
+          <span class="font-mono text-body-sm font-medium text-ink">unbg</span>
+        </a>
+        <p class="mt-sm max-w-[26ch] text-body-sm text-body">
+          Background removal that respects your pixels and your privacy.
+        </p>
+      </div>
+
+      {
+        columns.map((column) => (
+          <nav aria-label={column.title}>
+            <h2 class="font-mono text-caption-mono tracking-wider text-mute-ink uppercase">
+              {column.title}
+            </h2>
+            <ul class="mt-sm space-y-xs">
+              {column.links.map((link) => (
+                <li>
+                  <a
+                    href={link.href}
+                    class="text-body-sm text-body transition-colors hover:text-ink"
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ))
+      }
+    </div>
+
+    <div
+      class="mt-3xl flex flex-col gap-xs border-t border-hairline pt-lg text-caption-mono text-mute-ink sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p class="font-mono">© {year} unbg</p>
+      <p class="font-mono">No signup · No watermark · Images never used for training</p>
+    </div>
+  </div>
+</footer>

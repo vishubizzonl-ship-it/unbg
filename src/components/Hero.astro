@@ -1,0 +1,123 @@
+---
+// Hero: mesh gradient at hero scale only (DESIGN.md), display-xl headline,
+// 100px pill marketing CTAs, mono micro-copy.
+---
+
+<section class="relative overflow-hidden" aria-labelledby="hero-title">
+  <!-- brand mesh gradient — decorative, hero scale only -->
+  <div
+    aria-hidden="true"
+    class="mesh pointer-events-none absolute inset-x-0 -top-40 h-[520px] opacity-30 blur-3xl"
+  >
+  </div>
+
+  <div class="relative mx-auto grid max-w-[1200px] items-start gap-2xl px-lg pt-5xl pb-3xl lg:grid-cols-[1.05fr_0.95fr] lg:gap-4xl lg:pt-6xl lg:pb-4xl">
+    <div>
+      <p class="font-mono text-caption-mono tracking-wider text-mute-ink uppercase">
+        Background removal · no login · full resolution
+      </p>
+
+      <h1 id="hero-title" class="mt-md text-display-lg text-ink lg:text-display-xl">
+        Remove the background.
+        <br class="hidden sm:block" />Keep every pixel.
+      </h1>
+
+      <p class="mt-lg max-w-[46ch] text-body-lg text-body">
+        Transparent PNG in seconds — no signup, no watermark, no credit maths. Run it on your own
+        device for total privacy, or in the cloud when you need the best edges.
+      </p>
+
+      <div class="mt-xl flex flex-wrap items-center gap-sm">
+        <a
+          href="#start"
+          class="inline-flex h-12 items-center rounded-pill bg-ink px-lg text-button-lg text-white transition-colors hover:bg-[#383838]"
+        >
+          Start free
+        </a>
+        <a
+          href="#api"
+          class="inline-flex h-12 items-center rounded-pill border border-hairline bg-canvas px-lg text-button-lg text-ink transition-colors hover:bg-canvas-soft-2"
+        >
+          See the API
+        </a>
+      </div>
+
+      <p class="mt-lg font-mono text-caption-mono text-mute-ink">
+        PNG · JPG · WebP · AVIF — up to 25 MB. No account needed to download.
+      </p>
+    </div>
+
+    <!-- drop zone (visual shell — engine lands in phase 2) -->
+    <div id="start" class="w-full">
+      <div class="rounded-lg bg-canvas p-sm shadow-[var(--shadow-stack-3)]">
+        <div
+          class="flex flex-col items-center justify-center rounded-md border border-dashed border-hairline-strong bg-canvas-soft px-lg py-2xl text-center"
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            class="size-6 text-mute-ink"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 16V4" />
+            <path d="m7 9 5-5 5 5" />
+            <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+          </svg>
+          <p class="mt-sm text-body-md font-medium text-ink">Drop an image here</p>
+          <p class="mt-xxs font-mono text-caption-mono text-mute-ink">
+            or paste with ⌘V · URL import · batch up to 50
+          </p>
+          <button
+            type="button"
+            disabled
+            class="mt-lg inline-flex h-10 cursor-not-allowed items-center rounded-pill bg-ink px-lg text-button-md text-white opacity-60"
+          >
+            Choose a file
+          </button>
+          <p class="mt-sm font-mono text-caption-mono text-mute-ink">
+            engine: phase 2 — this button wires up next
+          </p>
+        </div>
+
+        <div class="mt-sm grid grid-cols-2 gap-sm">
+          <figure class="overflow-hidden rounded-md border border-hairline">
+            <div class="relative aspect-[4/3] bg-gradient-to-br from-canvas-soft-2 to-[#e8e8e8]">
+              <svg aria-hidden="true" viewBox="0 0 120 90" class="absolute inset-0 size-full">
+                <ellipse cx="60" cy="86" rx="26" ry="4" fill="#000000" opacity="0.08" />
+                <path
+                  d="M52 20h16v10l6 8v34a6 6 0 0 1-6 6H52a6 6 0 0 1-6-6V38l6-8Z"
+                  fill="#a1a1a1"
+                ></path>
+                <rect x="52" y="14" width="16" height="7" rx="2" fill="#888888"></rect>
+              </svg>
+            </div>
+            <figcaption class="border-t border-hairline px-xs py-xxs font-mono text-caption-mono text-mute-ink">
+              original
+            </figcaption>
+          </figure>
+
+          <figure class="overflow-hidden rounded-md border border-hairline">
+            <div class="checker relative aspect-[4/3]">
+              <svg aria-hidden="true" viewBox="0 0 120 90" class="absolute inset-0 size-full">
+                <path
+                  d="M52 20h16v10l6 8v34a6 6 0 0 1-6 6H52a6 6 0 0 1-6-6V38l6-8Z"
+                  fill="#171717"
+                ></path>
+                <rect x="52" y="14" width="16" height="7" rx="2" fill="#383838"></rect>
+              </svg>
+            </div>
+            <figcaption
+              class="border-t border-hairline px-xs py-xxs font-mono text-caption-mono text-ink"
+            >
+              transparent · full res
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

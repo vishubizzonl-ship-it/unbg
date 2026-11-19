@@ -29,3 +29,6 @@ pnpm-debug.log*
 # tailwind-4-docs local docs snapshot (source-available, keep local only)
 .claude/skills/tailwind-4-docs/references/docs/
 .claude/skills/tailwind-4-docs/references/docs-index.tsx
+
+# local audit artifacts (screenshots)
+.audit/

@@ -1,0 +1,46 @@
+---
+interface Props {
+  code: string;
+  label?: string;
+  dark?: boolean;
+}
+
+const { code, label = 'bash', dark = false } = Astro.props;
+---
+
+<div
+  class:list={[
+    'overflow-hidden rounded-md border',
+    dark ? 'border-white/15 bg-[#0f0f0f]' : 'border-hairline bg-canvas-soft',
+  ]}
+>
+  <div
+    class:list={[
+      'flex items-center justify-between border-b px-sm py-xs',
+      dark ? 'border-white/10' : 'border-hairline',
+    ]}
+  >
+    <span
+      class:list={[
+        'font-mono text-caption-mono uppercase tracking-wider',
+        dark ? 'text-white/65' : 'text-mute',
+      ]}>{label}</span
+    >
+    <span aria-hidden="true" class="flex gap-xxs">
+      <span class:list={['size-1.5 rounded-full', dark ? 'bg-white/20' : 'bg-canvas-soft-2']}
+      ></span>
+      <span class:list={['size-1.5 rounded-full', dark ? 'bg-white/20' : 'bg-canvas-soft-2']}
+      ></span>
+      <span class:list={['size-1.5 rounded-full', dark ? 'bg-white/20' : 'bg-canvas-soft-2']}
+      ></span>
+    </span>
+  </div>
+  <pre
+    tabindex="0"
+    role="region"
+    aria-label={`${label} code sample`}
+    class:list={[
+      'overflow-x-auto px-md py-sm font-mono text-body-sm leading-6',
+      dark ? 'text-white/85' : 'text-ink',
+    ]}><code set:html={code}></code></pre>
+</div>

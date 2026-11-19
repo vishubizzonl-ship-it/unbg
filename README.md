@@ -33,9 +33,10 @@ unbg/
 │   └── tailwind-4-docs/       # lombiq/tailwind-agent-skills
 ├── astro.config.mjs           # tailwindcss vite plugin
 └── src/
-    ├── layouts/Layout.astro
-    ├── pages/index.astro
-    └── styles/global.css      # @import "tailwindcss";
+    ├── layouts/Base.astro     # head/meta/OG, skip link, Nav + Footer shell
+    ├── components/            # Nav, Footer, Hero, CodeBlock, Faq
+    ├── pages/index.astro      # home: hero, why, how, presets, use cases, API, compare, FAQ
+    └── styles/global.css      # @theme tokens from DESIGN.md + base/components layer
 ```
 
 ## Agent skills
