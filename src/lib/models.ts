@@ -258,6 +258,18 @@ export const DEFAULT_MODEL_ID = 'onnx-community/ormbg-ONNX';
  * Best default for the device we actually detected: the SOTA model needs a
  * GPU, so CPU-only visitors start with the strongest graph that runs on CPU.
  */
-export function recommendedModelId(device: 'webgpu' | 'wasm'): string {
-  return device === 'webgpu' ? 'onnx-community/BEN2-ONNX' : DEFAULT_MODEL_ID;
+export function recommendedModelId(device: 'webgpu' | 'wasm', hint: { mobile?: boolean } = {}): string {
+  if (device === 'webgpu') return 'onnx-community/BEN2-ONNX';
+  // A phone has no WebGPU and maybe 4 GB of RAM shared with the browser: an 84 MB
+  // graph is a coin flip, MODNet's 7 MB is not. Same reason the download matters on
+  // mobile data — 7 MB is a tap, 84 MB is a wait.
+  if (hint.mobile) return 'Xenova/modnet';
+  return DEFAULT_MODEL_ID;
+}
+
+/** Best guess at "this is a phone", without a user-agent parser dependency. */
+export function looksMobile(userAgent = '', coarsePointer = false, deviceMemory?: number): boolean {
+  if (/Android|iPhone|iPad|iPod|Mobile|Opera Mini/i.test(userAgent)) return true;
+  if (typeof deviceMemory === 'number' && deviceMemory > 0 && deviceMemory <= 4) return true;
+  return coarsePointer;
 }

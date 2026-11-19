@@ -42,6 +42,18 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
     </label>
   </div>
 
+  <p class="mt-xxs flex flex-wrap items-center gap-x-xs gap-y-xxs font-mono text-caption-mono text-mute-ink">
+    <span>Kuch try karna hai?</span>
+    <button
+      id="up-sample"
+      type="button"
+      class="rounded-pill border border-hairline px-xs py-xxs text-ink hover:bg-canvas-soft-2"
+    >
+      Sample photo par chalao
+    </button>
+    <span id="up-hint"></span>
+  </p>
+
   <!-- model picker -->
   <div class="mt-sm rounded-md border border-hairline p-sm">
     <div class="flex items-center justify-between gap-sm">
@@ -196,7 +208,7 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
       </label>
     </div>
 
-    <div class="grid grid-cols-2 gap-sm">
+    <div id="up-grid" class="grid grid-cols-2 gap-sm">
       <figure class="overflow-hidden rounded-md border border-hairline">
         <div class="relative aspect-[4/3] bg-canvas-soft-2">
           <img id="up-before" alt="Original image" class="absolute inset-0 size-full object-contain" />
@@ -274,10 +286,8 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
 </div>
 
 <script>
-  import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, type BgModel } from '../lib/models';
+  import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, looksMobile, type BgModel } from '../lib/models';
 
-  // Mirrors the frontmatter lists — the <script> runs in its own module scope.
-  const SERVER_MODEL_IDS = new Set(MODELS.filter((m) => m.engine === 'server').map((m) => m.id));
   import { decodeImage, removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
   import { removeBackgroundImgly, imglyModelFor, IMGLY_MODEL_PREFIX } from '../lib/imgly';
   import { refineCutout } from '../lib/refine';
@@ -301,6 +311,13 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
     PROVIDERS,
   } from '../lib/cloud';
 
+  // Phones get the 7 MB model: no WebGPU, less RAM, and mobile data is not free.
+  const MOBILE = looksMobile(
+    navigator.userAgent,
+    typeof matchMedia === 'function' ? matchMedia('(pointer: coarse)').matches : false,
+    (navigator as { deviceMemory?: number }).deviceMemory,
+  );
+
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
 
   const root = $('unbg-up');
@@ -314,6 +331,8 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
     const note = $('up-note')!;
     const status = $('up-status')!;
     const fallback = $<HTMLButtonElement>('up-fallback')!;
+    const sampleButton = $<HTMLButtonElement>('up-sample')!;
+    const hint = $('up-hint')!;
     const result = $('up-result')!;
     const before = $<HTMLImageElement>('up-before')!;
     const after = $<HTMLImageElement>('up-after')!;
@@ -331,6 +350,7 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
     const compareRange = $<HTMLInputElement>('up-compare-range')!;
     const compareLine = $('up-compare-line')!;
     const bgRow = $('up-bg-row')!;
+    const grid = $('up-grid')!;
     const bgColor = $<HTMLInputElement>('up-bg-color')!;
     const maskToggle = $<HTMLInputElement>('up-mask-toggle')!;
     const matteToggle = $<HTMLInputElement>('up-matte')!;
@@ -396,6 +416,7 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
       cutout = blob;
       cutoutName = name;
       compare.hidden = false;
+      grid.hidden = true; // the slider already shows both sides
       bgRow.hidden = false;
       if (beforeUrl) compareBefore.src = beforeUrl;
       compareRange.value = '50';
@@ -483,7 +504,7 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
           ? 'webgpu'
           : 'cpu (no webgpu)';
       // Start on the strongest model this device can actually run.
-      if (!userPickedModel) select.value = recommendedModelId(detected);
+      if (!userPickedModel) select.value = recommendedModelId(detected, { mobile: MOBILE });
       updateNote();
     });
 
@@ -533,13 +554,17 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
     });
     updateNote();
 
+    hint.textContent = MOBILE
+      ? 'phone detected — MODNet (7 MB) sabse safe hai'
+      : 'desktop — ormbg (84 MB) default hai';
+
     /** Nudge the user back to something that works on this device. */
     function offerFallback(show: boolean) {
       fallback.hidden = !show;
     }
 
     fallback.addEventListener('click', () => {
-      const next = recommendedModelId(device);
+      const next = recommendedModelId(device, { mobile: MOBILE });
       select.value = next;
       userPickedModel = true;
       updateNote();
@@ -757,6 +782,24 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
     }
 
     fileInput.addEventListener('change', () => accept(fileInput.files));
+
+    // One tap, no file picker, no photo of your own: the whole pipeline from the repo's
+    // own sample image. This is the fastest way to see whether the app works on a device.
+    sampleButton.addEventListener('click', async () => {
+      if (busy) return;
+      sampleButton.disabled = true;
+      try {
+        setStatus('Sample photo la raha hoon…');
+        const response = await fetch('/sample.jpg');
+        if (!response.ok) throw new Error(`sample ${response.status}`);
+        const blob = await response.blob();
+        await run(new File([blob], 'sample.jpg', { type: 'image/jpeg' }));
+      } catch (error) {
+        setStatus(`Sample nahi mila: ${error instanceof Error ? error.message : error}`, 'error');
+      } finally {
+        sampleButton.disabled = false;
+      }
+    });
 
     for (const type of ['dragenter', 'dragover'] as const) {
       drop.addEventListener(type, (event) => {

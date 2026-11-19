@@ -2,7 +2,7 @@
 // there, first, and every entry must be loadable and documented.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MODELS, DEFAULT_MODEL_ID, recommendedModelId } from '../dist-test/models.js';
+import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, looksMobile } from '../dist-test/models.js';
 
 const ids = MODELS.map((m) => m.id);
 
@@ -51,4 +51,18 @@ test('local-server models are opt-in, at the end, and never the default', () => 
     assert.notEqual(m.id, DEFAULT_MODEL_ID, 'the server is never the default engine');
   }
   assert.ok(ids.length >= 16, 'all on-device models are still listed');
+});
+
+test('a phone gets the 7 MB model, a desktop CPU gets the 84 MB one', () => {
+  assert.equal(recommendedModelId('wasm', { mobile: true }), 'Xenova/modnet');
+  assert.equal(recommendedModelId('wasm'), DEFAULT_MODEL_ID);
+  assert.equal(recommendedModelId('webgpu', { mobile: true }), 'onnx-community/BEN2-ONNX');
+});
+
+test('mobile detection does not depend on a user-agent parser', () => {
+  assert.equal(looksMobile('Mozilla/5.0 (Linux; Android 14; Pixel 7) Mobile'), true);
+  assert.equal(looksMobile('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', false, 8), true);
+  assert.equal(looksMobile('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', false, 16), false);
+  assert.equal(looksMobile('Mozilla/5.0 (X11; Linux x86_64)', true, 16), true); // touch laptop
+  assert.equal(looksMobile('Mozilla/5.0 (Windows NT 10.0)', false, 2), true);  // 2 GB box
 });
