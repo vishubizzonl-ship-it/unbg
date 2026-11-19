@@ -39,6 +39,27 @@ unbg/
     └── styles/global.css      # @theme tokens from DESIGN.md + base/components layer
 ```
 
+## On-device models (Phase 2)
+
+Everything runs in the browser via `@huggingface/transformers` → `onnxruntime-web`
+(WebGPU when an adapter exists, quantised/WASM on CPU). No upload, no API key.
+
+| Model | Size | License | Commercial | Notes |
+|---|---|---|---|---|
+| BiRefNet lite 512 (`onnx-community/BiRefNet_lite-ONNX`) | ~99 MB | MIT | ✅ | default — best edges per MB |
+| BiRefNet lite 1024 (`jiabins0303/birefnet-lite-1024-webgpu`) | ~115 MB | MIT | ✅ | highest detail, WebGPU only |
+| RMBG-1.4 (`kittypdf/RMBG-1.4-transformersjs`) | ~44 MB | Non-commercial (BRIA) | ❌ | fastest general model — testing only |
+| BiRefNet full (`onnx-community/BiRefNet-ONNX`) | ~470 MB | MIT | ✅ | heaviest |
+| IS-Net (`onnx-community/ISNet-ONNX`) | ~176 MB | AGPL-3.0 | ❌ | strong on complex scenes |
+| MODNet (`Xenova/modnet`) | ~7 MB | Apache-2.0 | ✅ | portraits only, lightest |
+
+Registry lives in `src/lib/models.ts`; the engine is `src/lib/remove-bg.ts`.
+The library is dynamically imported, so the page ships **9 KB JS** until someone
+actually drops an image.
+
+CPU is the slow path: on a GPU-less laptop the 99 MB+ models can take minutes or
+run out of memory. The UI warns and points at MODNet when it detects CPU.
+
 ## Agent skills
 
 Installed with [`skills`](https://www.skills.sh):

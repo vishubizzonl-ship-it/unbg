@@ -1,0 +1,311 @@
+---
+// The one client island on the site. Everything runs locally in the browser.
+import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
+---
+
+<div id="unbg-up" class="rounded-lg bg-canvas p-sm shadow-[var(--shadow-stack-3)]">
+  <!-- drop zone: the file input is the real control, the label is its face.
+       (role="button" on a wrapper would nest interactives and break a11y.) -->
+  <div
+    id="up-drop"
+    class="rounded-md border border-dashed border-hairline-strong bg-canvas-soft transition-colors hover:bg-canvas-soft-2"
+  >
+    <input id="up-file" type="file" accept="image/*" class="peer sr-only" />
+    <label
+      for="up-file"
+      class="flex cursor-pointer flex-col items-center justify-center rounded-md px-lg py-xl text-center peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-link"
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        class="size-6 text-mute-ink"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M12 16V4"></path>
+        <path d="m7 9 5-5 5 5"></path>
+        <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path>
+      </svg>
+      <span class="mt-sm text-body-md font-medium text-ink">Drop an image here</span>
+      <span class="mt-xxs font-mono text-caption-mono text-mute-ink">
+        or click · paste with ⌘V · JPG PNG WebP · up to 25 MB
+      </span>
+    </label>
+  </div>
+
+  <!-- model picker -->
+  <div class="mt-sm rounded-md border border-hairline p-sm">
+    <div class="flex items-center justify-between gap-sm">
+      <label for="up-model" class="font-mono text-caption-mono tracking-wider text-mute-ink uppercase">
+        Model
+      </label>
+      <span id="up-device" class="font-mono text-caption-mono text-mute-ink">detecting…</span>
+    </div>
+    <select
+      id="up-model"
+      class="mt-xs w-full rounded-sm border border-hairline bg-canvas px-xs py-xxs font-mono text-body-sm text-ink"
+    >
+      {
+        MODELS.map((m) => (
+          <option value={m.id} selected={m.id === DEFAULT_MODEL_ID}>
+            {m.label} · ~{m.sizeMb} MB {m.licenseOk ? '' : '· ⚠ non-commercial'}
+          </option>
+        ))
+      }
+    </select>
+    <p id="up-note" class="mt-xxs text-caption-mono text-body"></p>
+  </div>
+
+  <!-- status (announced to screen readers) -->
+  <p
+    id="up-status"
+    role="status"
+    aria-live="polite"
+    class="mt-sm min-h-4 font-mono text-caption-mono text-body"
+  >
+  </p>
+
+  <!-- result -->
+  <div id="up-result" class="mt-sm" hidden>
+    <div class="grid grid-cols-2 gap-sm">
+      <figure class="overflow-hidden rounded-md border border-hairline">
+        <div class="relative aspect-[4/3] bg-canvas-soft-2">
+          <img id="up-before" alt="Original image" class="absolute inset-0 size-full object-contain" />
+        </div>
+        <figcaption class="border-t border-hairline px-xs py-xxs font-mono text-caption-mono text-mute-ink">
+          original
+        </figcaption>
+      </figure>
+
+      <figure class="overflow-hidden rounded-md border border-hairline">
+        <div class="checker relative aspect-[4/3]">
+          <img
+            id="up-after"
+            alt="Result with the background removed, shown on a transparency grid"
+            class="absolute inset-0 size-full object-contain"
+          />
+        </div>
+        <figcaption
+          class="border-t border-hairline px-xs py-xxs font-mono text-caption-mono text-ink"
+        >
+          transparent · full res
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="mt-sm flex flex-wrap items-center gap-xs">
+      <a
+        id="up-download"
+        download="unbg-cutout.png"
+        class="inline-flex h-10 items-center rounded-pill bg-ink px-md text-button-md text-white transition-colors hover:bg-[#383838]"
+      >
+        Download PNG
+      </a>
+      <button
+        id="up-again"
+        type="button"
+        class="inline-flex h-10 items-center rounded-pill border border-hairline px-md text-button-md text-ink transition-colors hover:bg-canvas-soft-2"
+      >
+        Try another model
+      </button>
+      <span id="up-timing" class="font-mono text-caption-mono text-mute-ink"></span>
+    </div>
+  </div>
+
+  <!-- local benchmark log — compare models on your own device -->
+  <div id="up-bench-wrap" class="mt-sm" hidden>
+    <table class="w-full border-collapse text-left">
+      <caption class="sr-only">
+        Timings for each model you have run on this device
+      </caption>
+      <thead>
+        <tr class="border-b border-hairline">
+          <th scope="col" class="py-xxs pr-xs font-mono text-caption-mono uppercase text-mute-ink">
+            Model
+          </th>
+          <th scope="col" class="py-xxs pr-xs font-mono text-caption-mono uppercase text-mute-ink">
+            Device
+          </th>
+          <th scope="col" class="py-xxs pr-xs font-mono text-caption-mono uppercase text-mute-ink">
+            Load
+          </th>
+          <th scope="col" class="py-xxs font-mono text-caption-mono uppercase text-mute-ink">
+            Infer
+          </th>
+        </tr>
+      </thead>
+      <tbody id="up-bench"></tbody>
+    </table>
+  </div>
+
+  <p class="mt-sm font-mono text-caption-mono text-mute-ink">
+    Runs on your device — the image is never uploaded.
+  </p>
+</div>
+
+<script>
+  import { MODELS, DEFAULT_MODEL_ID, type BgModel } from '../lib/models';
+  import { removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
+
+  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
+
+  const root = $('unbg-up');
+  if (root && !root.dataset.ready) {
+    root.dataset.ready = '1';
+
+    const drop = $('up-drop')!;
+    const fileInput = $<HTMLInputElement>('up-file')!;
+    const select = $<HTMLSelectElement>('up-model')!;
+    const note = $('up-note')!;
+    const status = $('up-status')!;
+    const result = $('up-result')!;
+    const before = $<HTMLImageElement>('up-before')!;
+    const after = $<HTMLImageElement>('up-after')!;
+    const download = $<HTMLAnchorElement>('up-download')!;
+    const again = $<HTMLButtonElement>('up-again')!;
+    const timing = $('up-timing')!;
+    const deviceLabel = $('up-device')!;
+    const benchWrap = $('up-bench-wrap')!;
+    const benchBody = $('up-bench')!;
+
+    let currentFile: File | Blob | null = null;
+    let beforeUrl: string | null = null;
+    let afterUrl: string | null = null;
+    let busy = false;
+
+    const model = (): BgModel =>
+      MODELS.find((m) => m.id === select.value) ?? MODELS[0];
+
+    let device: 'webgpu' | 'wasm' = 'wasm';
+    deviceLabel.textContent = 'detecting…';
+    void detectDevice().then((detected) => {
+      device = detected;
+      deviceLabel.textContent = detected === 'webgpu' ? 'webgpu' : 'cpu (no webgpu)';
+      updateNote();
+    });
+
+    function updateNote() {
+      const m = model();
+      const bits = [m.note, `license: ${m.license}`];
+      if (m.webgpuOnly && device !== 'webgpu') bits.push('needs WebGPU — use another model');
+      if (!m.webgpuOnly && device !== 'webgpu' && m.sizeMb >= 50)
+        bits.push('CPU par bada model — slow ya out-of-memory ho sakta hai; MODNet try karein');
+      if (!m.licenseOk) bits.push('⚠ testing only, not for commercial use');
+      note.textContent = bits.join(' · ');
+      note.className = m.licenseOk
+        ? 'mt-xxs text-caption-mono text-body'
+        : 'mt-xxs text-caption-mono text-error';
+    }
+    select.addEventListener('change', updateNote);
+    updateNote();
+
+    function setStatus(message: string, tone: 'normal' | 'error' = 'normal') {
+      status.textContent = message;
+      status.className =
+        tone === 'error'
+          ? 'mt-sm min-h-4 font-mono text-caption-mono text-error'
+          : 'mt-sm min-h-4 font-mono text-caption-mono text-body';
+    }
+
+    const fmt = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`);
+
+    function addBench(modelName: string, dev: string, loadMs: number, inferMs: number) {
+      benchWrap.hidden = false;
+      const row = document.createElement('tr');
+      row.className = 'border-b border-hairline';
+      for (const value of [modelName, dev, fmt(loadMs), fmt(inferMs)]) {
+        const cell = document.createElement('td');
+        cell.className = 'py-xxs pr-xs font-mono text-caption-mono text-body';
+        cell.textContent = value;
+        row.append(cell);
+      }
+      benchBody.prepend(row);
+    }
+
+    async function run(file: File | Blob) {
+      if (busy) return;
+      busy = true;
+      currentFile = file;
+
+      if (beforeUrl) URL.revokeObjectURL(beforeUrl);
+      beforeUrl = URL.createObjectURL(file);
+      before.src = beforeUrl;
+      result.hidden = false;
+      after.removeAttribute('src');
+      setStatus('Starting…');
+      again.disabled = true;
+      drop.setAttribute('aria-busy', 'true');
+
+      try {
+        const out = await removeBackground(file, select.value, ({ message }) => setStatus(message), { device });
+        if (afterUrl) URL.revokeObjectURL(afterUrl);
+        afterUrl = URL.createObjectURL(out.blob);
+        after.src = afterUrl;
+        download.href = afterUrl;
+        download.setAttribute('download', `unbg-${model().label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`);
+        const total = out.loadMs + out.inferMs;
+        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}`;
+        addBench(out.modelLabel, out.device, out.loadMs, out.inferMs);
+        setStatus(`Done — ${fmt(out.inferMs)} inference, full resolution PNG ready.`);
+      } catch (error) {
+        setStatus(`Failed: ${friendlyError(error)}`, 'error');
+      } finally {
+        busy = false;
+        again.disabled = false;
+        drop.removeAttribute('aria-busy');
+      }
+    }
+
+    function accept(files: FileList | null) {
+      const file = files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        setStatus('That is not an image file.', 'error');
+        return;
+      }
+      if (file.size > 25 * 1024 * 1024) {
+        setStatus('Image is larger than 25 MB.', 'error');
+        return;
+      }
+      void run(file);
+    }
+
+    fileInput.addEventListener('change', () => accept(fileInput.files));
+
+    for (const type of ['dragenter', 'dragover'] as const) {
+      drop.addEventListener(type, (event) => {
+        event.preventDefault();
+        drop.classList.add('bg-canvas-soft-2');
+      });
+    }
+    for (const type of ['dragleave', 'drop'] as const) {
+      drop.addEventListener(type, (event) => {
+        event.preventDefault();
+        drop.classList.remove('bg-canvas-soft-2');
+      });
+    }
+    drop.addEventListener('drop', (event) => {
+      const dt = (event as DragEvent).dataTransfer;
+      accept(dt?.files ?? null);
+    });
+
+    // paste anywhere on the page
+    window.addEventListener('paste', (event) => {
+      const item = Array.from(event.clipboardData?.items ?? []).find((i) =>
+        i.type.startsWith('image/'),
+      );
+      const file = item?.getAsFile();
+      if (file) {
+        event.preventDefault();
+        void run(file);
+      }
+    });
+
+    again.addEventListener('click', () => {
+      if (currentFile) void run(currentFile);
+    });
+  }
+</script>
