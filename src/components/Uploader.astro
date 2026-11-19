@@ -1,6 +1,7 @@
 ---
 // The one client island on the site. Everything runs locally in the browser.
 import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
+import { PROVIDERS } from '../lib/cloud';
 ---
 
 <div id="unbg-up" class="rounded-lg bg-canvas p-sm shadow-[var(--shadow-stack-3)]">
@@ -56,13 +57,14 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
         ))
       }
       <optgroup label="Cloud — photo unke server par jaati hai">
-        <option value="cloud:removebg">Cloud · remove.bg — free 50/month, best edges</option>
+        <option value="cloud:huggingface">{PROVIDERS.huggingface.label}</option>
+        <option value="cloud:removebg">{PROVIDERS.removebg.label}</option>
       </optgroup>
     </select>
     <p id="up-note" class="mt-xxs text-caption-mono text-body"></p>
 
     <div id="up-cloud" hidden class="mt-xs rounded-sm border border-hairline bg-canvas-soft p-xs">
-      <label for="up-key" class="block font-mono text-caption-mono text-body">
+      <label for="up-key" id="up-key-label" class="block font-mono text-caption-mono text-body">
         remove.bg API key — free 50 images/month at remove.bg/api
       </label>
       <input
@@ -73,9 +75,8 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
         placeholder="paste key here"
         class="mt-xxs w-full rounded-sm border border-hairline bg-canvas px-xs py-xxs font-mono text-body-sm text-ink"
       />
-      <p class="mt-xxs text-caption-mono text-mute-ink">
-        Key sirf is phone ke browser mein rehti hai. Photo remove.bg ke server par jaati hai — baaki 8 models
-        on-device hi rehte hain.
+      <p id="up-key-hint" class="mt-xxs text-caption-mono text-mute-ink">
+        Key sirf is phone ke browser mein rehti hai. Baaki 8 models on-device hi rehte hain.
       </p>
     </div>
 
@@ -181,7 +182,15 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
 <script>
   import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, type BgModel } from '../lib/models';
   import { decodeImage, removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
-  import { isCloudModel, removeBackgroundCloud, cloudKey, saveCloudKey, CloudError } from '../lib/cloud';
+  import {
+    isCloudModel,
+    cloudProvider,
+    removeBackgroundCloud,
+    cloudKey,
+    saveCloudKey,
+    CloudError,
+    PROVIDERS,
+  } from '../lib/cloud';
 
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
 
@@ -204,6 +213,8 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
     const deviceLabel = $('up-device')!;
     const cloudBlock = $('up-cloud')!;
     const keyInput = $<HTMLInputElement>('up-key')!;
+    const keyLabel = $('up-key-label')!;
+    const keyHint = $('up-key-hint')!;
     const benchWrap = $('up-bench-wrap')!;
     const benchBody = $('up-bench')!;
 
@@ -217,13 +228,22 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
     const model = (): BgModel =>
       MODELS.find((m) => m.id === select.value) ?? MODELS[0];
 
+    const provider = () => cloudProvider(select.value);
+
     const syncCloudBlock = (): void => {
+      const info = PROVIDERS[provider()];
       cloudBlock.hidden = !cloud();
-      if (cloud() && !keyInput.value) keyInput.value = cloudKey();
+      keyLabel.textContent = info.keyLabel;
+      keyInput.placeholder = info.keyPlaceholder;
+      keyHint.textContent = `${info.hint} Key sirf is phone ke browser mein rehti hai; baaki 8 models on-device hi rehte hain.`;
+      if (cloud()) keyInput.value = cloudKey(provider());
       deviceLabel.textContent = cloud() ? 'cloud' : device === 'webgpu' ? 'webgpu' : 'cpu (no webgpu)';
     };
 
-    keyInput.addEventListener('change', () => saveCloudKey(keyInput.value));
+    keyInput.addEventListener('change', () => {
+      saveCloudKey(provider(), keyInput.value);
+      syncCloudBlock();
+    });
 
     let device: 'webgpu' | 'wasm' = 'wasm';
     let userPickedModel = false;
@@ -245,8 +265,7 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
 
     function updateNote() {
       if (cloud()) {
-        note.textContent =
-          'remove.bg ka cloud model — free 50 images/month, sabse acche edges. Photo unke server par jaati hai.';
+        note.textContent = `${PROVIDERS[provider()].label.replace('Cloud · ', '')} — photo unke server par jaati hai.`;
         note.className = 'mt-xxs text-caption-mono text-body';
         syncCloudBlock();
         return;
@@ -312,15 +331,18 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
         before.alt = `Original image · ${decoded.width}×${decoded.height}`;
 
         if (cloud()) {
-          const out = await removeBackgroundCloud(file, ({ message }) => setStatus(message));
+          const chosen = provider();
+          const out = await removeBackgroundCloud(file, chosen, ({ message }) => setStatus(message));
           if (afterUrl) URL.revokeObjectURL(afterUrl);
           afterUrl = URL.createObjectURL(out.blob);
           after.src = afterUrl;
           download.href = afterUrl;
-          download.setAttribute('download', 'unbg-cloud.png');
-          timing.textContent = `remove.bg · cloud · ${out.width}×${out.height}`;
-          addBench('remove.bg (cloud)', 'cloud', 0, 0);
-          setStatus('Done — background removed on remove.bg, full resolution PNG ready.');
+          const isHf = chosen === 'huggingface';
+          const cloudName = isHf ? 'Hugging Face' : 'remove.bg';
+          download.setAttribute('download', isHf ? 'unbg-huggingface.png' : 'unbg-removebg.png');
+          timing.textContent = `${cloudName} · cloud · ${out.width}×${out.height}`;
+          addBench(`${cloudName} (cloud)`, 'cloud', 0, 0);
+          setStatus(`Done — background removed on ${cloudName}, full resolution PNG ready.`);
           return;
         }
 

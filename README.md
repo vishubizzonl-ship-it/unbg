@@ -234,6 +234,19 @@ Server: `https://mcp.docs.astro.build/mcp` (streamable HTTP, remote — nothing 
 - Design tokens (colors, type scale, spacing) `DESIGN.md` mein documented hain —
   naya UI banate waqt wahin se values lo.
 
+### Two cloud engines, both free
+
+| option in the model list | what it costs | key |
+| --- | --- | --- |
+| `Cloud · Hugging Face BiRefNet — free token, no card` | free account, rate-limited GPU quota | `hf_…` from huggingface.co/settings/tokens |
+| `Cloud · remove.bg — free 50/month, best edges` | 50 images / month | remove.bg/api |
+
+Both go through the same local proxy (`POST /api/remove?provider=…`); the key is
+read from localStorage, sent as a header, and never stored by the server. The
+Hugging Face path uploads to the BiRefNet demo Space, queues the named endpoint,
+reads the SSE stream and downloads the PNG — every failure has its own sentence
+(401 bad token, quota/queue error, no output, network).
+
 ## Optional cloud path (bring your own key)
 
 On-device stays the default — nothing leaves the phone unless you ask. For the
