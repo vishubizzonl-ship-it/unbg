@@ -106,7 +106,7 @@ export function describeServerError(status: number, body: unknown): ServerError 
   const messages: Record<string, string> = {
     unknown_model: 'Server par ye model registered nahi hai — /api/models dekho.',
     model_unavailable:
-      'Model download nahi hua. Server par chalाओ: python scripts/fetch_models.py birefnet-portrait',
+      'Model download nahi hua. Server par chalao: python scripts/fetch_models.py birefnet-portrait',
     unsupported_media: 'Server sirf JPG, PNG ya WEBP leta hai.',
     too_large: 'File server ki limit se badi hai (default 20 MB).',
     unreadable_image: 'Image server par khul nahi paayi — file kharab lagti hai.',
