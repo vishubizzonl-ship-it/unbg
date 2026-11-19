@@ -196,7 +196,7 @@ start_server() {
     if [ -z "$interval" ] && [ -s "$HOME/.unbg-interval" ]; then
       interval="$(tr -dc '0-9' <"$HOME/.unbg-interval")"
     fi
-    [ -n "$interval" ] || interval=180
+    [ -n "$interval" ] || interval=1
     nohup env UNBG_DIR="$APP_DIR" UNBG_PORT="$PORT" UNBG_CHECK_INTERVAL="$interval" \
       UNBG_LOG="$LOG_FILE" bash "$APP_DIR/scripts/unbg-watch.sh" >>"$LOG_FILE" 2>&1 &
     echo "$! $PORT" >"$PID_FILE"
@@ -209,7 +209,7 @@ start_server() {
   command -v termux-wake-lock >/dev/null && termux-wake-lock 2>/dev/null || true
 
   if healthy "$PORT"; then
-    ok "unbg is live → http://localhost:$PORT (auto-update every ${UNBG_CHECK_INTERVAL:-$(cat "$HOME/.unbg-interval" 2>/dev/null || echo 180)}s)"
+    ok "unbg is live → http://localhost:$PORT (auto-update every ${UNBG_CHECK_INTERVAL:-$(cat "$HOME/.unbg-interval" 2>/dev/null || echo 1)}s)"
     notify_live
     local ip; ip="$(lan_ip)"
     [ -n "$ip" ] && ok "Same Wi-Fi par: http://$ip:$PORT"
@@ -241,7 +241,7 @@ case "${1:-start}" in
     fi
     if running; then
       ok "Running (pid $(server_pid)) on http://localhost:$PORT"
-      ok "Auto-update: checks GitHub every ${UNBG_CHECK_INTERVAL:-180}s"
+      ok "Auto-update: checks GitHub every ${UNBG_CHECK_INTERVAL:-$(cat "$HOME/.unbg-interval" 2>/dev/null || echo 1)}s"
     else
       warn "Not running — start with: unbg"
     fi

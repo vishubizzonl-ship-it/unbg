@@ -21,9 +21,9 @@ if [ -n "${UNBG_CHECK_INTERVAL:-}" ]; then
 elif [ -s "$INTERVAL_FILE" ]; then
   CHECK_INTERVAL="$(tr -dc '0-9' <"$INTERVAL_FILE")"
 else
-  CHECK_INTERVAL=180
+  CHECK_INTERVAL=1
 fi
-[ "${CHECK_INTERVAL:-0}" -ge 1 ] 2>/dev/null || CHECK_INTERVAL=180
+[ "${CHECK_INTERVAL:-0}" -ge 1 ] 2>/dev/null || CHECK_INTERVAL=1
 TOKEN_FILE="$HOME/.unbg-token"
 LOG_FILE="${UNBG_LOG:-$HOME/.unbg-server.log}"
 BRANCH="main"
