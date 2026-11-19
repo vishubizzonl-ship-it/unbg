@@ -234,6 +234,15 @@ Server: `https://mcp.docs.astro.build/mcp` (streamable HTTP, remote — nothing 
 - Design tokens (colors, type scale, spacing) `DESIGN.md` mein documented hain —
   naya UI banate waqt wahin se values lo.
 
+### The port is pinned, on purpose
+
+`unbg` serves on **4321** and stays there, because a URL that never changes is
+worth more than a clever port picker — the browser should never have to guess.
+If something else owns 4321, the launcher kills stray `astro dev` processes and
+retries; if a foreign app still holds it, you get one sentence with two options
+(close that app, or pin another port with `unbg port 4322`). It no longer walks
+4321…4340 and quietly moves the URL underneath you.
+
 ### When the server will not come up
 
 ```bash

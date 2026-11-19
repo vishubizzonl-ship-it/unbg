@@ -214,15 +214,6 @@ notify_live() {
     --action "termux-open http://localhost:$PORT" 2>/dev/null || true
 }
 
-pick_free_port() {
-  local p
-  for p in $(seq 4321 4340); do
-    if [ "$p" != "$PORT" ] && ! port_open "$p"; then
-      PORT="$p"; printf '%s' "$PORT" >"$PORT_FILE"; return 0
-    fi
-  done
-  return 1
-}
 
 spawn_supervisor() {
   local interval="${UNBG_CHECK_INTERVAL:-}"
@@ -276,10 +267,17 @@ start_server() {
     local attempt=0
     while : ; do
       attempt=$((attempt + 1))
-      if port_open "$PORT"; then
-        warn "port $PORT par kuch aur chal raha hai — khali port dhoondh raha hoon"
-        pick_free_port || die "4321–4340 sab busy — 'unbg port 4400' chalao"
-        ok "port $PORT"
+      # The port is pinned on purpose: a URL that never changes is worth more
+      # than a clever picker. Anything else sitting on it gets cleaned up.
+      if port_open "$PORT" && ! serving_unbg "$PORT"; then
+        say "port $PORT par kuch aur chal raha hai — purane astro process band kar raha hoon"
+        pkill -f "astro dev" 2>/dev/null || true
+        sleep 2
+      fi
+      if port_open "$PORT" && ! serving_unbg "$PORT"; then
+        die "port $PORT par koi doosra app baitha hai aur band nahi hua.
+   Us app ko band karo (ya phone restart karo), phir:  unbg fix
+   Ya doosra port pakka karo:  unbg port 4322  &&  unbg restart"
       fi
       say "Starting supervisor on port $PORT… (koshish $attempt/3)"
       spawn_supervisor
@@ -292,8 +290,7 @@ start_server() {
       if [ "$attempt" -ge 3 ]; then
         die "3 koshishon mein up nahi hua — upar ka log screenshot bhejein"
       fi
-      pick_free_port || die "khali port nahi mila — 'unbg port 4400' chalao"
-      say "Dusre port par try: $PORT"
+      say "Wahi port $PORT par dobara try kar raha hoon…"
     done
   fi
 
