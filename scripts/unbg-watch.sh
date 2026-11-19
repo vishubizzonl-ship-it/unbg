@@ -8,6 +8,8 @@
 #      changed files by itself; if package.json / the lockfile / astro.config
 #      changed, the child is restarted instead.
 #   4. child died? start it again (2 s backoff)
+#   5. child alive but not answering on the port (astro sometimes wedges)? kill it
+#      and start again — a browser "localhost refused to connect" fixes itself.
 #
 # Everything is local — nothing is deployed.
 
@@ -38,6 +40,9 @@ token() {
 }
 
 CHILD=0
+HEALTH_FAILS=0
+HEALTH_EVERY="${UNBG_HEALTH_INTERVAL:-15}"   # seconds between "is it actually serving?" probes
+HEALTH_LIMIT="${UNBG_HEALTH_LIMIT:-4}"       # consecutive misses before recycling (~60 s)
 
 stop_child() {
   if [ "$CHILD" != "0" ] && kill -0 "$CHILD" 2>/dev/null; then
@@ -61,7 +66,26 @@ start_child() {
   cd "$APP_DIR" || return 1
   npm run dev -- --host 0.0.0.0 --port "$PORT" --force >>"$LOG_FILE" 2>&1 &
   CHILD=$!
+  HEALTH_FAILS=0
   log "dev server started (pid $CHILD, port $PORT)"
+}
+
+# Is *our* app answering? /version.json is cheap and only unbg has it.
+serving() {
+  local body
+  body="$(curl -fsS --max-time 4 "http://127.0.0.1:${PORT}/version.json" 2>/dev/null)" || return 1
+  case "$body" in
+    *'"app":"unbg"'*|*'"app": "unbg"'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Something else may hold the port (a stray astro, another project). Say so once.
+port_holder_hint() {
+  command -v ss >/dev/null 2>&1 || return 0
+  local holder
+  holder="$(ss -tlnp 2>/dev/null | awk -v p=":${PORT}\$" '$4 ~ p {print $6}' | head -1)"
+  [ -n "$holder" ] && log "port $PORT is held by: $holder"
 }
 
 # One tiny request: what commit does origin/main point at right now?
@@ -120,6 +144,7 @@ if [ "$CHECK_INTERVAL" -le 2 ]; then
 fi
 start_child
 last_check=$(date +%s)
+last_health=$(date +%s)
 
 while true; do
   sleep 1
@@ -133,6 +158,26 @@ while true; do
   fi
 
   now=$(date +%s)
+  if [ $((now - last_health)) -ge "$HEALTH_EVERY" ]; then
+    last_health=$now
+    if [ "$CHILD" != "0" ] && kill -0 "$CHILD" 2>/dev/null; then
+      if serving; then
+        [ "$HEALTH_FAILS" -gt 0 ] && log "dev server answering again"
+        HEALTH_FAILS=0
+      else
+        HEALTH_FAILS=$((HEALTH_FAILS + 1))
+        log "health check failed ($HEALTH_FAILS/$HEALTH_LIMIT) — port $PORT not answering"
+        if [ "$HEALTH_FAILS" -ge "$HEALTH_LIMIT" ]; then
+          port_holder_hint
+          log "recycling the dev server"
+          stop_child
+          sleep 2
+          start_child
+        fi
+      fi
+    fi
+  fi
+
   if [ $((now - last_check)) -ge "$CHECK_INTERVAL" ]; then
     last_check=$now
     pull_update

@@ -382,7 +382,14 @@ case "${1:-start}" in
       ok "Running (pid $(server_pid || echo —)) on http://localhost:$PORT"
       ok "Auto-update: checks GitHub every ${UNBG_CHECK_INTERVAL:-$(cat "$HOME/.unbg-interval" 2>/dev/null || echo 1)}s"
     else
-      warn "Not running — start with: unbg"
+      warn "Not running — browser will say 'localhost refused to connect'"
+      if curl -s --max-time 2 "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
+        warn "Port $PORT par kuch aur chal raha hai, hamara app nahi — unbg fix"
+      fi
+      if [ -f "$LOG_FILE" ]; then
+        echo "last log line: $(tail -n 1 "$LOG_FILE" 2>/dev/null)"
+      fi
+      echo "   start: unbg        (ya: unbg restart)"
     fi
     ;;
   logs)

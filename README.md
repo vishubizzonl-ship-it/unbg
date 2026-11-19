@@ -151,6 +151,26 @@ and skips the native download entirely. The browser path is unaffected — it us
 **Phone reality check:** the heavy models (BiRefNet, RMBG-1.4) need 100 MB+ of weights
 and a GPU. On a mid-range phone start with **MODNet** (7 MB), then try RMBG-1.4.
 
+## When the browser says "localhost refused to connect"
+
+That message always means one thing: nothing is listening on port 4321 on *that* device.
+The app is not deployed — it lives in Termux on your phone, so the server has to be running.
+
+```bash
+unbg status     # is it up? prints the last log line when it is not
+unbg            # start (pulls the latest commit, then opens Chrome)
+unbg logs       # what the server is saying
+```
+
+Why it can stop on its own, and what is now done about it:
+
+| cause | fix |
+|---|---|
+| Termux closed / Android killed it | `unbg` — and install Termux:Boot so `unbg` runs at boot (`unbg` does this for you on Termux) |
+| battery optimisation | `unbg` takes a `termux-wake-lock`; also exempt Termux from battery optimisation in Android settings |
+| dev server wedged (process alive, port dead) | the supervisor now probes `/version.json` every 15 s and recycles the child after 4 misses (~60 s) |
+| another app squatting on 4321 | `unbg fix`, or `unbg port 4322 && unbg restart` |
+
 ## On-device models (Phase 2)
 
 Everything runs in the browser via `@huggingface/transformers` → `onnxruntime-web`

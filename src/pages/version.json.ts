@@ -29,7 +29,7 @@ export const GET: APIRoute = () =>
       {
         app: 'unbg',
         tagline: 'remove the background. keep every pixel.',
-        version: '0.9.1',
+        version: '0.9.2',
         build: buildId(),
         theme: 'ink-on-canvas (Vercel design language)',
         models: {
