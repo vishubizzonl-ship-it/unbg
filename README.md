@@ -57,7 +57,7 @@ npx skills add https://github.com/lombiq/tailwind-agent-skills \
   python skills/tailwind-4-docs/scripts/sync_tailwind_docs.py --accept-docs-license
   ```
 
-  (Run from `.claude/skills/` — the script accepts the upstream docs license and
+  (Snapshot initialized 2026-11-19 — 199 docs, local-only, gitignored. Refresh if older than a week.)
   pulls a local, private snapshot. `references/gotchas.md` is the fallback until then.)
 
 ## Astro Docs MCP
