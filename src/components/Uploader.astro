@@ -779,13 +779,14 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
 
         const coverageNote = ` · mask ${Math.round(out.coverage * 100)}%`;
         const upgradeNote = out.autoUpgraded ? ` · ${out.autoUpgraded} se retry` : '';
+        const polishNote = out.polished ? ` · edges polished ${out.bandPixels}px` : '';
         const matteNote = out.matteMs > 0 ? ` · matte ${fmt(out.matteMs)}` : '';
         const scaleNote = out.scaled
           ? ' · scaled to 40 MP'
           : decoded.downscaled
             ? ' · phone ne 2048px par decode kiya'
             : '';
-        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}${cleanNote}${scaleNote}${coverageNote}${upgradeNote}${matteNote}${out.maskWarning ? ' · ⚠ mask ko check karo' : ''}`;
+        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}${cleanNote}${polishNote}${scaleNote}${coverageNote}${upgradeNote}${matteNote}${out.maskWarning ? ' · ⚠ mask ko check karo' : ''}`;
         addBench(out.modelLabel, out.device, out.loadMs, out.inferMs);
         const suggestion = out.maskWarning ? upgradeSuggestion(select.value) : null;
         upgrade.hidden = !suggestion;

@@ -207,6 +207,31 @@ afford: 25 MB instead of 7 MB buys a correct cutout. Measured on
 | `model_quantized.onnx` (q8) | 27.9 % — sliced shoe, background kept | 84.2 % — dark background kept | unusable |
 | `model.onnx` (fp32) | 51.8 % — complete shoe | 74.2 % — hair kept, background gone | correct |
 
+### Edge polish (`src/lib/edges.ts`)
+
+The last step before the PNG, and the one people judge by eye. The mask arrives
+at 512–1024 px and gets stretched over the photo, which leaves two artefacts:
+the transition band is soft again, and every half-covered pixel still carries the
+old background's colour — the white/green fringe around hair.
+
+`polishEdges()` fixes both in one pass over the decoded image, with no model and
+no extra bytes:
+
+1. bilinear upsample of the mask onto the photo,
+2. a Hermite ramp (0.18 → 0.82) to re-crisp what the upscale smeared,
+3. colour unmixing in the band: `F = (C − (1−α)·B) / α`, with `B` sampled from a
+   16×16 grid of pixels the mask is sure it threw away.
+
+On the portrait sample it cut the soft band from **8 692 px to 3 650 px** and
+pulled the fringe towards the subject's own colour; on the sneaker it removed the
+pale outline against a white studio background. It is skipped above 8 MP so a
+40 MP desktop photo cannot wedge a low-end device, and it is pure typed-array
+maths — six unit tests, no canvas needed.
+
+Matting (`ViTMatte`, 99 MB) is the other edge upgrade and stays **opt-in**: on a
+2 GB class device it kills the tab, so offering it as an automatic step would be
+a trap.
+
 ### The production bundle broke onnxruntime's worker
 
 `env.backends.onnx.wasm.proxy = true` runs the CPU session inside

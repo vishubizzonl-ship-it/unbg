@@ -19,6 +19,7 @@ import {
 } from './mask';
 import { decodeImage, DecodeError, formatLabel, isBrowserDecodable, type DecodedImage } from './decode';
 import { matteRefine } from './matte';
+import { MAX_PIXELS as POLISH_MAX_PIXELS, polishEdges } from './edges';
 
 export { decodeImage, DecodeError, type DecodedImage };
 
@@ -56,6 +57,10 @@ export interface Removal {
   maskWarning: MaskProblem | null;
   /** Label of the stronger model that was retried automatically, if any. */
   autoUpgraded: string | null;
+  /** True when the edge band was re-crisped and colour-unmixed. */
+  polished: boolean;
+  /** Pixels inside the transition band — the ones the polish touched. */
+  bandPixels: number;
 }
 
 export type MaskProblem = 'kept-all' | 'kept-none';
@@ -309,7 +314,14 @@ function modelInput(image: DecodedImage): HTMLCanvasElement {
 async function composite(
   image: DecodedImage,
   plane: { data: Float32Array; width: number; height: number },
-): Promise<{ blob: Blob; width: number; height: number; scaled: boolean }> {
+): Promise<{
+  blob: Blob;
+  width: number;
+  height: number;
+  scaled: boolean;
+  polished: boolean;
+  bandPixels: number;
+}> {
   const { data, width, height } = plane;
 
   const maskCanvas = document.createElement('canvas');
@@ -342,6 +354,34 @@ async function composite(
   const ctx = out.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D is unavailable in this browser');
 
+  // Edge polish: re-crisp the upscaled ramp and unmix the background colour out
+  // of the transition band. Pure math on the pixels we already have — no model,
+  // no extra bytes. Skipped on very large photos to stay phone-safe.
+  let polished = false;
+  let bandPixels = 0;
+  if (shrink === 1 && image.width * image.height <= POLISH_MAX_PIXELS) {
+    const source = image.canvas.getContext('2d', { willReadFrequently: true });
+    if (source) {
+      const pixels = source.getImageData(0, 0, image.width, image.height);
+      const result = polishEdges(pixels.data, image.width, image.height, plane);
+      polished = true;
+      bandPixels = result.bandPixels;
+      const composed = new ImageData(out.width, out.height);
+      for (let i = 0, p = 0; i < result.alpha.length; i++, p += 4) {
+        composed.data[p] = result.rgb[p];
+        composed.data[p + 1] = result.rgb[p + 1];
+        composed.data[p + 2] = result.rgb[p + 2];
+        composed.data[p + 3] = Math.round(Math.min(1, Math.max(0, result.alpha[i])) * 255);
+      }
+      ctx.putImageData(composed, 0, 0);
+      const blob = await new Promise<Blob | null>((resolve) =>
+        out.toBlob((b) => resolve(b), 'image/png'),
+      );
+      if (!blob) throw new Error('Could not encode the PNG');
+      return { blob, width: out.width, height: out.height, scaled: false, polished, bandPixels };
+    }
+  }
+
   ctx.drawImage(image.canvas, 0, 0, out.width, out.height);
   ctx.globalCompositeOperation = 'destination-in';
   ctx.imageSmoothingEnabled = true;
@@ -352,7 +392,7 @@ async function composite(
     out.toBlob((b) => resolve(b), 'image/png'),
   );
   if (!blob) throw new Error('Could not encode the PNG');
-  return { blob, width: out.width, height: out.height, scaled: shrink < 1 };
+  return { blob, width: out.width, height: out.height, scaled: shrink < 1, polished, bandPixels };
 }
 
 /** The final mask as a greyscale PNG: white = kept, black = removed. */
@@ -494,7 +534,7 @@ export async function removeBackground(
   }
 
   onStage({ stage: 'run', message: 'Compositing PNG…' });
-  const { blob, width, height, scaled } = await composite(image, finalPlane);
+  const { blob, width, height, scaled, polished, bandPixels } = await composite(image, finalPlane);
   const maskBlob = await maskToBlob(finalPlane);
   const kept = coverage(finalPlane);
 
@@ -515,6 +555,8 @@ export async function removeBackground(
     maskBlob,
     matteMs,
     maskWarning: maskLooksWrong({ coverage: kept, border: borderCoverage(finalPlane) }),
+    polished,
+    bandPixels,
     autoUpgraded: null,
   };
 }
