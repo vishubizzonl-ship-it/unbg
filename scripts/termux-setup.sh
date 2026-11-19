@@ -33,6 +33,11 @@ PORT_FILE="$HOME/.unbg-port"
 saved_port() { [ -s "$PORT_FILE" ] && tr -dc "0-9" <"$PORT_FILE" | head -c 5 || true; }
 PORT="${UNBG_PORT:-$(saved_port)}"
 [ -n "${PORT:-}" ] || PORT=4321
+# A port handed in through the environment becomes the saved default, so
+# "UNBG_PORT=4322 unbg" is a one-time fix for boot and widget too.
+if [ -n "${UNBG_PORT:-}" ]; then
+  case "$UNBG_PORT" in *[!0-9]*) ;; *) printf '%s' "$UNBG_PORT" >"$PORT_FILE" 2>/dev/null || true ;; esac
+fi
 TOKEN_FILE="$HOME/.unbg-token"
 PID_FILE="$HOME/.unbg-server.pid"
 LOG_FILE="$HOME/.unbg-server.log"
@@ -394,7 +399,9 @@ case "${1:-start}" in
     ok "Updated — restart with: unbg restart"
     ;;
   *)
-    die "Unknown command: $1 (try: start | status | logs | stop | restart | update | open)"
+    die "Unknown command: $1
+   Commands: start | status | logs | stop | restart | update | port | live | doctor | open | autostart
+   Purana script hai? pehle: bash ~/unbg/scripts/termux-setup.sh update"
     ;;
 esac
 
