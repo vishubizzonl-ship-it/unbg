@@ -222,6 +222,24 @@ function toAlphaPlane(tensor: any): { data: Float32Array; width: number; height:
 
 
 /** Composite the alpha plane over the photo → transparent PNG blob. */
+/** Longest side fed to the network. Masks are upscaled, so nothing is lost. */
+const MODEL_MAX_SIDE = 2048;
+
+function modelInput(image: DecodedImage): HTMLCanvasElement {
+  const { canvas } = image;
+  const longest = Math.max(canvas.width, canvas.height);
+  if (longest <= MODEL_MAX_SIDE) return canvas;
+  const scale = MODEL_MAX_SIDE / longest;
+  const small = document.createElement('canvas');
+  small.width = Math.round(canvas.width * scale);
+  small.height = Math.round(canvas.height * scale);
+  const ctx = small.getContext('2d');
+  if (!ctx) return canvas;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(canvas, 0, 0, small.width, small.height);
+  return small;
+}
+
 async function composite(
   image: DecodedImage,
   plane: { data: Float32Array; width: number; height: number },
@@ -272,7 +290,7 @@ async function composite(
 }
 
 /** Turn runtime noise into something a human can act on. */
-export function friendlyError(error: unknown): string {
+export function friendlyError(error: unknown, modelLabel?: string): string {
   if (error instanceof DecodeError) {
     const mb =
       error.bytes < 1024 * 1024
@@ -291,7 +309,11 @@ export function friendlyError(error: unknown): string {
     return 'Model download failed — network blocked or unreachable. Is page ko normal browser tab mein kholein (in-app preview iframe mein network band hota hai).';
   }
   if (/out of memory|OOM|Aborted|RuntimeError|memory/i.test(message)) {
-    return 'Device ran out of memory for this model. Chhota model (MODNet) try karein, ya WebGPU wale browser/device par kholein.';
+    const alreadySmallest = !!modelLabel && /modnet/i.test(modelLabel);
+    const advice = alreadySmallest
+      ? 'MODNet hi sabse chhota model hai, to: doosre Chrome tabs band karo, page reload karke dobara try karo, ya thodi chhoti photo daalo.'
+      : 'Model chhota karo (MODNet ~7 MB), doosre tabs band karo, aur page reload karke dobara try karo.';
+    return `Phone ka memory khatam ho gaya. ${advice}`;
   }
   if (/backend|adapter|webgpu/i.test(message)) {
     return 'WebGPU is not usable in this browser. Device detect hua CPU — chhota model chunein.';
@@ -314,35 +336,44 @@ export async function removeBackground(
     );
   }
 
-  const loadStart = performance.now();
-  let loadedModel: Loaded;
+  const { RawImage } = await libs();
+  // The photo was decoded once, up front — no second decode, no second chance
+  // to fail halfway through. Only a capped copy goes to the network.
+  const raw = RawImage.fromCanvas(modelInput(image));
+
+  type Attempt = { model: Loaded['model']; output: unknown; loadMs: number; inferMs: number };
+
+  const attempt = async (dev: 'webgpu' | 'wasm'): Promise<Attempt> => {
+    const loadStart = performance.now();
+    const { model, processor } = await loadModel(m, dev, onStage);
+    const loadMs = performance.now() - loadStart;
+    onStage({
+      stage: 'run',
+      message: `Removing background… (${dev === 'webgpu' ? 'GPU' : 'CPU'})`,
+    });
+    const inputs = await processor(raw);
+    const inferStart = performance.now();
+    const output = await runModel(model, inputs);
+    return { model, output, loadMs, inferMs: performance.now() - inferStart };
+  };
+
+  let result: Attempt;
   try {
-    loadedModel = await loadModel(m, device, onStage);
+    result = await attempt(device);
   } catch (error) {
-    // GPU present but unusable (no adapter / driver / flag) → retry on CPU.
+    // Phones hand out a WebGPU adapter and then run out of memory building the
+    // session, or mid-inference. The same model on CPU usually works — and a
+    // CPU answer beats an error screen.
     if (device === 'webgpu') {
-      onStage({ stage: 'load', message: 'GPU unavailable — switching to CPU…' });
+      onStage({ stage: 'load', message: 'GPU par memory kam pad gayi — CPU par dobara try kar raha hoon…' });
       device = 'wasm';
-      loadedModel = await loadModel(m, device, onStage);
+      result = await attempt(device);
     } else {
       throw error;
     }
   }
-  const { model, processor } = loadedModel;
-  const loadMs = performance.now() - loadStart;
 
-  const { RawImage } = await libs();
-  onStage({ stage: 'run', message: 'Removing background…' });
-
-  // The photo was decoded once, up front — no second decode, no second chance
-  // to fail halfway through.
-  const raw = RawImage.fromCanvas(image.canvas);
-  const inputs = await processor(raw);
-
-  const inferStart = performance.now();
-  const output = await runModel(model, inputs);
-  const inferMs = performance.now() - inferStart;
-
+  const { loadMs, inferMs, output } = result;
   const tensor = firstTensor(output);
   const plane = toAlphaPlane(tensor);
 

@@ -284,7 +284,7 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
         addBench(out.modelLabel, out.device, out.loadMs, out.inferMs);
         setStatus(`Done — ${fmt(out.inferMs)} inference, full resolution PNG ready.`);
       } catch (error) {
-        setStatus(`Failed: ${friendlyError(error)}`, 'error');
+        setStatus(`Failed: ${friendlyError(error, model().label)}`, 'error');
       } finally {
         busy = false;
         again.disabled = false;
