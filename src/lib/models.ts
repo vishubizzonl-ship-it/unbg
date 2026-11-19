@@ -32,9 +32,26 @@ export interface BgModel {
   dtype: Dtype;
   /** Needs WebGPU (no usable CPU graph) */
   webgpuOnly?: boolean;
+  /**
+   * Which runtime serves this entry. `imgly` runs @imgly/background-removal in a
+   * Web Worker (its own ONNX + wasm bundle), so it skips the transformers path.
+   */
+  engine?: 'transformers' | 'imgly';
 }
 
 export const MODELS: BgModel[] = [
+  {
+    id: 'imgly/isnet-quint8',
+    label: 'IMG.LY isnet — Web Worker',
+    note: 'IMG.LY ki library, apne worker mein chalti hai — page kabhi freeze nahi hota',
+    license: 'AGPL-3.0 (library)',
+    licenseOk: true,
+    sizeMb: 44,
+    speed: 'balanced',
+    scope: 'general',
+    dtype: 'uint8',
+    engine: 'imgly',
+  },
   {
     id: 'onnx-community/BEN2-ONNX',
     label: 'BEN2 — best edges',

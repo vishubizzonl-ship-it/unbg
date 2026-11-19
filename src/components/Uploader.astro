@@ -182,6 +182,7 @@ import { PROVIDERS } from '../lib/cloud';
 <script>
   import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, type BgModel } from '../lib/models';
   import { decodeImage, removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
+  import { removeBackgroundImgly, IMGLY_MODEL_ID } from '../lib/imgly';
   import {
     isCloudModel,
     cloudProvider,
@@ -271,6 +272,12 @@ import { PROVIDERS } from '../lib/cloud';
         return;
       }
       const m = model();
+      if (m.engine === 'imgly') {
+        note.textContent = `${m.note} · ~${m.sizeMb} MB · license: ${m.license}`;
+        note.className = 'mt-xxs text-caption-mono text-body';
+        syncCloudBlock();
+        return;
+      }
       const bits = [m.note, `license: ${m.license}`];
       if (m.webgpuOnly && device !== 'webgpu') bits.push('needs WebGPU — use another model');
       if (!m.webgpuOnly && device !== 'webgpu' && m.sizeMb >= 50)
@@ -294,6 +301,17 @@ import { PROVIDERS } from '../lib/cloud';
           ? 'mt-sm min-h-4 font-mono text-caption-mono text-error'
           : 'mt-sm min-h-4 font-mono text-caption-mono text-body';
     }
+
+    const measure = async (blob: Blob): Promise<string> => {
+      try {
+        const bitmap = await createImageBitmap(blob);
+        const text = `${bitmap.width}×${bitmap.height}`;
+        bitmap.close?.();
+        return text;
+      } catch {
+        return 'PNG';
+      }
+    };
 
     const fmt = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`);
 
@@ -343,6 +361,22 @@ import { PROVIDERS } from '../lib/cloud';
           timing.textContent = `${cloudName} · cloud · ${out.width}×${out.height}`;
           addBench(`${cloudName} (cloud)`, 'cloud', 0, 0);
           setStatus(`Done — background removed on ${cloudName}, full resolution PNG ready.`);
+          return;
+        }
+
+        if (select.value === IMGLY_MODEL_ID) {
+          const out = await removeBackgroundImgly(file, 'isnet_quint8', (percent, label) =>
+            setStatus(`${label}… ${percent}%`),
+          );
+          if (afterUrl) URL.revokeObjectURL(afterUrl);
+          afterUrl = URL.createObjectURL(out.blob);
+          after.src = afterUrl;
+          download.href = afterUrl;
+          download.setAttribute('download', 'unbg-imgly.png');
+          const size = await measure(out.blob);
+          timing.textContent = `IMG.LY isnet · web worker · ${(out.ms / 1000).toFixed(1)}s · ${size}`;
+          addBench('IMG.LY isnet (worker)', 'worker', out.ms, out.ms);
+          setStatus(`Done — IMG.LY worker finished in ${(out.ms / 1000).toFixed(1)}s.`);
           return;
         }
 

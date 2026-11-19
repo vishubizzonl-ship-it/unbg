@@ -247,6 +247,22 @@ Hugging Face path uploads to the BiRefNet demo Space, queues the named endpoint,
 reads the SSE stream and downloads the PNG — every failure has its own sentence
 (401 bad token, quota/queue error, no output, network).
 
+### IMG.LY — the worker engine
+
+`@imgly/background-removal` (v1.7.0) is in the model list as
+`IMG.LY isnet — Web Worker`. It runs its own ONNX model through
+onnxruntime-web inside a Web Worker (`src/workers/imgly.worker.ts`), so the page
+never blocks: the drop zone, scrolling and the model picker stay responsive
+while a ~44 MB model downloads and runs on first use.
+
+* Wrapper: `src/lib/imgly.ts` — one worker per page, reused, progress mapped to
+  the status line (`Model download… 42%`, `Removing background… 100%`).
+* License: the library is **AGPL-3.0** (the model is IS-Net). Running it locally
+  is fine; if unbg is ever offered as a hosted service, the AGPL obliges you to
+  publish the source of that service. `remove.bg` / Hugging Face options do not.
+* First run downloads model + wasm from `staticimgly.com` (~44 MB), cached after
+  that. Offline use needs those assets copied into the project.
+
 ## Optional cloud path (bring your own key)
 
 On-device stays the default — nothing leaves the phone unless you ask. For the
