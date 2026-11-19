@@ -9,7 +9,8 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "test": "npx --yes esbuild src/lib/mask.ts --format=esm --outfile=dist-test/mask.js --log-level=error && node --test tests/mask.test.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",

@@ -57,6 +57,16 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
       }
     </select>
     <p id="up-note" class="mt-xxs text-caption-mono text-body"></p>
+
+    <label class="mt-xs flex items-center gap-xs text-caption-mono text-body">
+      <input
+        id="up-clean"
+        type="checkbox"
+        checked
+        class="size-3.5 accent-[#171717]"
+      />
+      <span>Clean up — remove stray spots, fill holes, soften edges</span>
+    </label>
   </div>
 
   <!-- status (announced to screen readers) -->
@@ -147,7 +157,7 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
 </div>
 
 <script>
-  import { MODELS, DEFAULT_MODEL_ID, type BgModel } from '../lib/models';
+  import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, type BgModel } from '../lib/models';
   import { removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
 
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
@@ -159,6 +169,7 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
     const drop = $('up-drop')!;
     const fileInput = $<HTMLInputElement>('up-file')!;
     const select = $<HTMLSelectElement>('up-model')!;
+    const cleanToggle = $<HTMLInputElement>('up-clean')!;
     const note = $('up-note')!;
     const status = $('up-status')!;
     const result = $('up-result')!;
@@ -180,10 +191,16 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
       MODELS.find((m) => m.id === select.value) ?? MODELS[0];
 
     let device: 'webgpu' | 'wasm' = 'wasm';
+    let userPickedModel = false;
+    select.addEventListener('change', () => {
+      userPickedModel = true;
+    });
     deviceLabel.textContent = 'detecting…';
     void detectDevice().then((detected) => {
       device = detected;
       deviceLabel.textContent = detected === 'webgpu' ? 'webgpu' : 'cpu (no webgpu)';
+      // Start on the strongest model this device can actually run.
+      if (!userPickedModel) select.value = recommendedModelId(detected);
       updateNote();
     });
 
@@ -240,14 +257,19 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
       drop.setAttribute('aria-busy', 'true');
 
       try {
-        const out = await removeBackground(file, select.value, ({ message }) => setStatus(message), { device });
+        const out = await removeBackground(file, select.value, ({ message }) => setStatus(message), {
+          device,
+          clean: cleanToggle.checked,
+        });
         if (afterUrl) URL.revokeObjectURL(afterUrl);
         afterUrl = URL.createObjectURL(out.blob);
         after.src = afterUrl;
         download.href = afterUrl;
         download.setAttribute('download', `unbg-${model().label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`);
         const total = out.loadMs + out.inferMs;
-        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}`;
+        const cleaned = out.cleanup.blobsRemoved + out.cleanup.holesFilled;
+        const cleanNote = cleaned > 0 ? ` · cleaned ${cleaned}px` : '';
+        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}${cleanNote}`;
         addBench(out.modelLabel, out.device, out.loadMs, out.inferMs);
         setStatus(`Done — ${fmt(out.inferMs)} inference, full resolution PNG ready.`);
       } catch (error) {

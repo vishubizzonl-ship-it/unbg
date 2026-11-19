@@ -83,12 +83,33 @@ Everything runs in the browser via `@huggingface/transformers` → `onnxruntime-
 
 | Model | Size | License | Commercial | Notes |
 |---|---|---|---|---|
-| BiRefNet lite 512 (`onnx-community/BiRefNet_lite-ONNX`) | ~99 MB | MIT | ✅ | default — best edges per MB |
-| BiRefNet lite 1024 (`jiabins0303/birefnet-lite-1024-webgpu`) | ~115 MB | MIT | ✅ | highest detail, WebGPU only |
-| RMBG-1.4 (`kittypdf/RMBG-1.4-transformersjs`) | ~44 MB | Non-commercial (BRIA) | ❌ | fastest general model — testing only |
-| BiRefNet full (`onnx-community/BiRefNet-ONNX`) | ~470 MB | MIT | ✅ | heaviest |
-| IS-Net (`onnx-community/ISNet-ONNX`) | ~176 MB | AGPL-3.0 | ❌ | strong on complex scenes |
-| MODNet (`Xenova/modnet`) | ~7 MB | Apache-2.0 | ✅ | portraits only, lightest |
+| **BEN2** (`onnx-community/BEN2-ONNX`) | 209 MB | MIT | ✅ | new default on WebGPU — best hair/fur/transparent edges |
+| **ormbg** (`onnx-community/ormbg-ONNX`) | 84 MB | Apache-2.0 | ✅ | new default on CPU-only devices |
+| BiRefNet lite 512 (`onnx-community/BiRefNet_lite-ONNX`) | 109 MB | MIT | ✅ | balanced |
+| MVANet (`onnx-community/MVANet-ONNX`) | 202 MB | MIT | ✅ | fine structures, WebGPU |
+| BiRefNet lite 1024 (`jiabins0303/birefnet-lite-1024-webgpu`) | 115 MB | MIT | ✅ | higher resolution, WebGPU |
+| RMBG-1.4 (`kittypdf/RMBG-1.4-transformersjs`) | 44 MB | Non-commercial (BRIA) | ❌ | fastest general model — testing only |
+| BiRefNet full (`onnx-community/BiRefNet-ONNX`) | 470 MB | MIT | ✅ | heaviest |
+| IS-Net (`onnx-community/ISNet-ONNX`) | 176 MB | AGPL-3.0 | ❌ | strong on complex scenes |
+| MODNet (`Xenova/modnet`) | 7 MB | Apache-2.0 | ✅ | portraits only, lightest |
+
+The UI picks the strongest model the device can actually run: **BEN2** when a
+WebGPU adapter exists, **ormbg** otherwise.
+
+### Mask cleanup (`src/lib/mask.ts`)
+
+Raw segmentation output has three kinds of junk — stray blobs, interior holes and
+mushy edges. `cleanMask()` fixes all three on the low-res plane (pure functions,
+unit-tested with `npm test`):
+
+1. `smoothstep` sharpens the 0.35–0.65 probability ramp,
+2. `keepLargest` drops disconnected blobs smaller than 2 % of the subject
+   (a genuinely large second object is kept),
+3. `fillHoles` floods from the border and promotes anything unreached,
+4. `feather` softens the edge by one pixel.
+
+On a MODNet portrait this cut partial-alpha pixels from 4.4 % → 1.4 % and removed
+98 px of stray mask. Toggle it with the **Clean up** checkbox.
 
 Registry lives in `src/lib/models.ts`; the engine is `src/lib/remove-bg.ts`.
 The library is dynamically imported, so the page ships **9 KB JS** until someone

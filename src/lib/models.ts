@@ -5,8 +5,8 @@
  * WebGPU with WASM fallback). No server, no API key, no upload.
  *
  * `licenseOk` = safe for a commercial product. Models flagged false are
- * included because the user asked to test them side by side — the UI marks
- * them clearly and they must not ship in the final product.
+ * included so they can be compared side by side — the UI marks them and they
+ * must not ship in the final product.
  */
 
 export type Dtype = 'fp32' | 'fp16' | 'q8' | 'int8' | 'uint8';
@@ -30,26 +30,61 @@ export interface BgModel {
   scope: 'general' | 'portrait';
   /** Precision requested from transformers.js */
   dtype: Dtype;
-  /** Only works on WebGPU (hits storage-buffer limits on WASM) */
+  /** Needs WebGPU (no usable CPU graph) */
   webgpuOnly?: boolean;
 }
 
 export const MODELS: BgModel[] = [
   {
-    id: 'onnx-community/BiRefNet_lite-ONNX',
-    label: 'BiRefNet lite 512',
-    note: 'Balanced default — cleanest edges for its size, runs on GPU or CPU',
+    id: 'onnx-community/BEN2-ONNX',
+    label: 'BEN2 — best edges',
+    note: '2025 state of the art on hair, fur and transparent edges. Needs WebGPU',
     license: 'MIT',
     licenseOk: true,
-    sizeMb: 99,
+    sizeMb: 209,
+    speed: 'slow',
+    scope: 'general',
+    dtype: 'fp16',
+    webgpuOnly: true,
+  },
+  {
+    id: 'onnx-community/ormbg-ONNX',
+    label: 'ormbg — best on CPU',
+    note: 'Strong general-purpose cutout that also runs without a GPU',
+    license: 'Apache-2.0',
+    licenseOk: true,
+    sizeMb: 84,
     speed: 'balanced',
     scope: 'general',
     dtype: 'fp16',
   },
   {
+    id: 'onnx-community/BiRefNet_lite-ONNX',
+    label: 'BiRefNet lite 512',
+    note: 'Balanced: clean edges for its size, runs on GPU or CPU',
+    license: 'MIT',
+    licenseOk: true,
+    sizeMb: 109,
+    speed: 'balanced',
+    scope: 'general',
+    dtype: 'fp16',
+  },
+  {
+    id: 'onnx-community/MVANet-ONNX',
+    label: 'MVANet',
+    note: 'Excellent on fine structures (wires, glasses, mesh). Heavy',
+    license: 'MIT',
+    licenseOk: true,
+    sizeMb: 202,
+    speed: 'slow',
+    scope: 'general',
+    dtype: 'fp16',
+    webgpuOnly: true,
+  },
+  {
     id: 'jiabins0303/birefnet-lite-1024-webgpu',
     label: 'BiRefNet lite 1024',
-    note: 'Highest detail on hair, fur and thin edges — 4× slower',
+    note: 'Higher-resolution variant — finer detail, 4× slower',
     license: 'MIT',
     licenseOk: true,
     sizeMb: 115,
@@ -72,7 +107,7 @@ export const MODELS: BgModel[] = [
   {
     id: 'onnx-community/BiRefNet-ONNX',
     label: 'BiRefNet full',
-    note: 'Full-size BiRefNet — best quality, heaviest. May fall back to CPU',
+    note: 'Full-size BiRefNet — heavy, best on difficult subjects',
     license: 'MIT',
     licenseOk: true,
     sizeMb: 470,
@@ -83,7 +118,7 @@ export const MODELS: BgModel[] = [
   {
     id: 'onnx-community/ISNet-ONNX',
     label: 'IS-Net',
-    note: 'Strong on complex scenes; AGPL — only usable if unbg itself is open source',
+    note: 'Strong on complex scenes; AGPL — only if unbg itself is open source',
     license: 'AGPL-3.0',
     licenseOk: false,
     sizeMb: 176,
@@ -104,4 +139,12 @@ export const MODELS: BgModel[] = [
   },
 ];
 
-export const DEFAULT_MODEL_ID = MODELS[0].id;
+export const DEFAULT_MODEL_ID = 'onnx-community/ormbg-ONNX';
+
+/**
+ * Best default for the device we actually detected: the SOTA model needs a
+ * GPU, so CPU-only visitors start with the strongest graph that runs on CPU.
+ */
+export function recommendedModelId(device: 'webgpu' | 'wasm'): string {
+  return device === 'webgpu' ? 'onnx-community/BEN2-ONNX' : DEFAULT_MODEL_ID;
+}

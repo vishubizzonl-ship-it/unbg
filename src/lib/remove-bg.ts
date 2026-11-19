@@ -9,6 +9,7 @@
  */
 
 import { MODELS, type BgModel } from './models';
+import { cleanMask, type CleanupReport } from './mask';
 
 export interface Stage {
   stage: 'load' | 'run' | 'done';
@@ -26,6 +27,7 @@ export interface Removal {
   inferMs: number;
   device: string;
   modelLabel: string;
+  cleanup: CleanupReport;
 }
 
 type Libs = typeof import('@huggingface/transformers');
@@ -290,7 +292,7 @@ export async function removeBackground(
   file: Blob,
   modelId: string,
   onStage: OnStage,
-  options: { device?: 'webgpu' | 'wasm' } = {},
+  options: { device?: 'webgpu' | 'wasm'; clean?: boolean } = {},
 ): Promise<Removal> {
   const m = modelById(modelId);
   let device = options.device ?? (await detectDevice());
@@ -331,11 +333,15 @@ export async function removeBackground(
   const tensor = firstTensor(output);
   const plane = toAlphaPlane(tensor);
 
+  // Sharpen the ramp, drop stray blobs, close holes, feather the edge.
+  onStage({ stage: 'run', message: 'Cleaning up the mask…' });
+  const cleanup = cleanMask(plane, { clean: options.clean ?? true, featherRadius: 1 });
+
   onStage({ stage: 'run', message: 'Compositing PNG…' });
   const domImage = await blobToImage(file);
   const { blob, width, height } = await composite(domImage, plane);
 
   onStage({ stage: 'done', message: 'Done' });
 
-  return { blob, width, height, loadMs, inferMs, device, modelLabel: m.label };
+  return { blob, width, height, loadMs, inferMs, device, modelLabel: m.label, cleanup };
 }

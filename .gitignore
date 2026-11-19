@@ -35,3 +35,7 @@ pnpm-debug.log*
 
 # local test fixtures
 .audit/
+
+# test build output
+.dist-test/
+dist-test/
