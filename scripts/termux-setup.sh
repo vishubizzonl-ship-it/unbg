@@ -287,6 +287,30 @@ case "${1:-start}" in
     install_autostart
     start_server
     ;;
+  fix)
+    say "unbg fix — purane process saaf, latest code, phir start"
+    [ -f "$PID_FILE" ] && kill "$(server_pid)" 2>/dev/null || true
+    pkill -f "astro dev.*--port" 2>/dev/null || true
+    pkill -f "unbg-watch.sh" 2>/dev/null || true
+    rm -f "$PID_FILE"
+    sleep 1
+    sync_repo
+    install_deps
+    install_autostart
+    if ! serving_unbg "$PORT" && port_open "$PORT"; then
+      warn "port $PORT kisi doosre app ne pakda hua hai — khud khali port dhoondh raha hoon"
+      for p in $(seq 4321 4340); do
+        if ! port_open "$p"; then
+          PORT="$p"; printf '%s' "$p" >"$PORT_FILE"
+          ok "Naya port: $p (yaad rakh liya)"
+          break
+        fi
+      done
+      if port_open "$PORT"; then die "4321–4340 sab busy — 'unbg port 4400' chalao"; fi
+    fi
+    start_server
+    ;;
+
   port)
     newp="${2:-}"
     if [ -z "$newp" ]; then
@@ -361,6 +385,15 @@ case "${1:-start}" in
     fi
 
     echo "── what port $PORT actually serves ─────────"
+    echo "── what port $PORT serves ─────────────────"
+    echo "── ports listening now ────────────────────"
+    if command -v ss >/dev/null; then
+      ss -tln 2>/dev/null | awk 'NR>1{print "   " $4}' | grep -E ':(43[0-9][0-9])$' || echo "   (kuch nahi)"
+    else
+      echo "   (ss available nahi)"
+    fi
+    echo "── last 6 log lines ──────────────────────"
+    tail -n 6 "$LOG_FILE" 2>/dev/null | sed 's/^/   /' || echo "   (log khali)"
     body=""
     body="$(curl -fsS --max-time 5 "http://127.0.0.1:$PORT/version.json" 2>/dev/null || true)"
     if [ -z "$body" ]; then
@@ -400,7 +433,7 @@ case "${1:-start}" in
     ;;
   *)
     die "Unknown command: $1
-   Commands: start | status | logs | stop | restart | update | port | live | doctor | open | autostart
+   Commands: fix | start | status | logs | stop | restart | update | port | live | doctor | open | autostart
    Purana script hai? pehle: bash ~/unbg/scripts/termux-setup.sh update"
     ;;
 esac
