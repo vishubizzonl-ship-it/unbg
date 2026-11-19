@@ -29,7 +29,10 @@ set -uo pipefail
 REPO_OWNER="vishubizzonl-ship-it"
 REPO_NAME="unbg"
 APP_DIR="${UNBG_DIR:-$HOME/unbg}"
-PORT="${UNBG_PORT:-4321}"
+PORT_FILE="$HOME/.unbg-port"
+saved_port() { [ -s "$PORT_FILE" ] && tr -dc "0-9" <"$PORT_FILE" | head -c 5 || true; }
+PORT="${UNBG_PORT:-$(saved_port)}"
+[ -n "${PORT:-}" ] || PORT=4321
 TOKEN_FILE="$HOME/.unbg-token"
 PID_FILE="$HOME/.unbg-server.pid"
 LOG_FILE="$HOME/.unbg-server.log"
@@ -187,7 +190,10 @@ BOOT
 #!$sh
 termux-wake-lock 2>/dev/null || true
 "$PREFIX/bin/unbg" start
-termux-open "http://localhost:$PORT" 2>/dev/null || true
+# resolve the port at run time, so 'unbg port 4322' also moves the widget
+P=""
+[ -s "\$HOME/.unbg-port" ] && P=\$(tr -dc 0-9 <"\$HOME/.unbg-port")
+termux-open "http://localhost:\${P:-$PORT}" 2>/dev/null || true
 WIDGET
   chmod +x "$HOME/.shortcuts/unbg"
 
@@ -211,7 +217,7 @@ start_server() {
     if port_open "$PORT"; then
       die "port $PORT par koi DOOSRA app chal raha hai — /version.json se unbg confirm nahi hua.
    title: $(curl -fsS --connect-timeout 2 --max-time 4 "http://127.0.0.1:$PORT/" 2>/dev/null | grep -o '<title>[^<]*' | head -1 | cut -c8-)
-   Do options:  us app ko band karo,  ya  UNBG_PORT=4322 unbg
+   Do options:  us app ko band karo,  ya  'unbg port 4322' (hamesha ke liye)
    Detail:      unbg doctor"
     fi
     if pid_alive; then
@@ -261,6 +267,13 @@ start_server() {
   fi
 }
 
+keep_installed_command_current() {
+  local self="$APP_DIR/scripts/termux-setup.sh"
+  [ -n "${PREFIX:-}" ] && [ -f "$self" ] || return 0
+  [ "$(readlink -f "$0")" != "$(readlink -f "$PREFIX/bin/unbg" 2>/dev/null)" ] || return 0
+  cp -f "$self" "$PREFIX/bin/unbg" && chmod +x "$PREFIX/bin/unbg" && ok "Command updated: unbg"
+}
+
 case "${1:-start}" in
   start|"")
     need_pkgs
@@ -268,12 +281,18 @@ case "${1:-start}" in
     install_deps
     install_autostart
     start_server
-    # keep the installed command in sync with the repo copy
-    self="$APP_DIR/scripts/termux-setup.sh"
-    if [ -n "${PREFIX:-}" ] && [ -f "$self" ] && [ "$(readlink -f "$0")" != "$(readlink -f "$PREFIX/bin/unbg" 2>/dev/null)" ]; then
-      cp -f "$self" "$PREFIX/bin/unbg" && chmod +x "$PREFIX/bin/unbg" && ok "Command updated: unbg"
+    ;;
+  port)
+    newp="${2:-}"
+    if [ -z "$newp" ]; then
+      ok "Port: $PORT  (source: ${UNBG_PORT:+env}${UNBG_PORT:-$([ -s "$PORT_FILE" ] && echo "$PORT_FILE" || echo default)})"
+    else
+      case "$newp" in *[!0-9]*) die "port number chahiye, e.g. unbg port 4322" ;; esac
+      printf '%s' "$newp" >"$PORT_FILE"
+      ok "Port saved: $newp → ab 'unbg restart' (http://localhost:$newp)"
     fi
     ;;
+
   status)
     if [ -f "$HOME/.termux/boot/70-unbg" ]; then
       ok "Autostart: boot script present (Termux:Boot)"
@@ -314,7 +333,7 @@ case "${1:-start}" in
       warn "${local_s}s = ~$((86400 / local_s)) GitHub requests/day — battery aur data kharch hoga"
       warn "Thoda kam chahiye to: unbg live 10"
     fi
-    PORT="${UNBG_PORT:-4321}"
+    PORT="${UNBG_PORT:-$(saved_port)}"; [ -n "${PORT:-}" ] || PORT=4321
     export UNBG_CHECK_INTERVAL="$local_s"
     "$0" restart
     ;;
@@ -378,3 +397,6 @@ case "${1:-start}" in
     die "Unknown command: $1 (try: start | status | logs | stop | restart | update | open)"
     ;;
 esac
+
+# Keep the installed command in sync with the repo copy, whatever subcommand ran.
+keep_installed_command_current
