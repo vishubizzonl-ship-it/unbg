@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cleanMask, labelComponents, binarize, keepLargest, fillHoles, feather,
-  coverage, borderCoverage, looksInverted, invert, erode,
+  coverage, borderCoverage, looksInverted, invert, erode, trimap,
 } from '../dist-test/mask.js';
 
 const makePlane = (w, h, fill = 0) => ({ data: new Float32Array(w * h).fill(fill), width: w, height: h });
@@ -109,4 +109,29 @@ test('erode with radius 0 changes nothing', () => {
   const before = Float32Array.from(p.data);
   erode(p, 0);
   assert.deepEqual(Array.from(p.data), Array.from(before));
+});
+
+// Trimap: sure subject, sure background, and the band matting is allowed to decide.
+test('trimap marks the core 255, the far background 0 and the edge 128', () => {
+  const p = makePlane(80, 80);
+  rect(p, 20, 20, 60, 60);
+  const tri = trimap(p, 6);
+  assert.equal(tri[40 * 80 + 40], 255, 'centre is certain foreground');
+  assert.equal(tri[2 * 80 + 2], 0, 'corner is certain background');
+  assert.equal(tri[20 * 80 + 40], 128, 'the boundary sits in the unknown band');
+  const counts = { fg: 0, bg: 0, unk: 0 };
+  for (const v of tri) {
+    if (v === 255) counts.fg++;
+    else if (v === 0) counts.bg++;
+    else counts.unk++;
+  }
+  assert.ok(counts.fg > 0 && counts.bg > 0 && counts.unk > 0, JSON.stringify(counts));
+  assert.ok(counts.fg < 1600, 'the certain foreground shrank by the band');
+});
+
+test('a wider band leaves a bigger unknown region', () => {
+  const p = makePlane(60, 60);
+  rect(p, 15, 15, 45, 45);
+  const count = (band) => Array.from(trimap(p, band)).filter((v) => v === 128).length;
+  assert.ok(count(8) > count(2));
 });

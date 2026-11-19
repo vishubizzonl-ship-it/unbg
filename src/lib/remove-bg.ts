@@ -11,6 +11,7 @@
 import { MODELS, type BgModel } from './models';
 import { cleanMask, coverage, invert, looksInverted, type CleanupReport } from './mask';
 import { decodeImage, DecodeError, formatLabel, isBrowserDecodable, type DecodedImage } from './decode';
+import { matteRefine } from './matte';
 
 export { decodeImage, DecodeError, type DecodedImage };
 
@@ -39,6 +40,8 @@ export interface Removal {
   invertedMask: boolean;
   /** Greyscale PNG of the final mask, for the 'show mask' toggle. */
   maskBlob: Blob | null;
+  /** Wall time spent in ViTMatte, 0 when matting was off or skipped. */
+  matteMs: number;
 }
 
 type Libs = typeof import('@huggingface/transformers');
@@ -350,7 +353,7 @@ export async function removeBackground(
   image: DecodedImage,
   modelId: string,
   onStage: OnStage,
-  options: { device?: 'webgpu' | 'wasm'; clean?: boolean } = {},
+  options: { device?: 'webgpu' | 'wasm'; clean?: boolean; matte?: boolean } = {},
 ): Promise<Removal> {
   const m = modelById(modelId);
   let device = options.device ?? (await detectDevice());
@@ -414,10 +417,29 @@ export async function removeBackground(
   onStage({ stage: 'run', message: 'Cleaning up the mask…' });
   const cleanup = cleanMask(plane, { clean: options.clean ?? true, featherRadius: 1 });
 
+  // Second stage: matting on the real pixels, if the user asked for it.
+  let finalPlane = plane;
+  let matteMs = 0;
+  if (options.matte) {
+    try {
+      const matted = await matteRefine(image.canvas, plane, device, (message) =>
+        onStage({ stage: 'run', message }),
+      );
+      finalPlane = matted.plane;
+      matteMs = matted.ms;
+    } catch (error) {
+      // Matting is an upgrade, not a requirement: never lose the cutout for it.
+      onStage({
+        stage: 'run',
+        message: `Matting chhod diya (${error instanceof Error ? error.message : 'unknown'}) — segmentation wala result use ho raha hai`,
+      });
+    }
+  }
+
   onStage({ stage: 'run', message: 'Compositing PNG…' });
-  const { blob, width, height, scaled } = await composite(image, plane);
-  const maskBlob = await maskToBlob(plane);
-  const kept = coverage(plane);
+  const { blob, width, height, scaled } = await composite(image, finalPlane);
+  const maskBlob = await maskToBlob(finalPlane);
+  const kept = coverage(finalPlane);
 
   onStage({ stage: 'done', message: 'Done' });
 
@@ -434,5 +456,6 @@ export async function removeBackground(
     coverage: kept,
     invertedMask,
     maskBlob,
+    matteMs,
   };
 }

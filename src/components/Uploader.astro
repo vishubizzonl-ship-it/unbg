@@ -91,6 +91,11 @@ import { PROVIDERS } from '../lib/cloud';
     </label>
 
     <label class="mt-xs flex items-center gap-xs text-caption-mono text-body">
+      <input id="up-matte" type="checkbox" checked class="size-3.5 accent-[#171717]" />
+      <span>Alpha matting (ViTMatte) — baal, fur, sheesha; extra ~99 MB pehli baar</span>
+    </label>
+
+    <label class="mt-xs flex items-center gap-xs text-caption-mono text-body">
       <input id="up-mask-toggle" type="checkbox" disabled class="size-3.5 accent-[#171717]" />
       <span>Mask dekho — jo AI ne kata (white = rakha, black = hataya)</span>
     </label>
@@ -221,6 +226,7 @@ import { PROVIDERS } from '../lib/cloud';
     const deviceLabel = $('up-device')!;
     const cloudBlock = $('up-cloud')!;
     const maskToggle = $<HTMLInputElement>('up-mask-toggle')!;
+    const matteToggle = $<HTMLInputElement>('up-matte')!;
     const keyInput = $<HTMLInputElement>('up-key')!;
     const keyLabel = $('up-key-label')!;
     const keyHint = $('up-key-hint')!;
@@ -425,6 +431,7 @@ import { PROVIDERS } from '../lib/cloud';
         const out = await removeBackground(decoded, select.value, ({ message }) => setStatus(message), {
           device,
           clean: cleanToggle.checked,
+          matte: matteToggle.checked,
         });
         if (afterUrl) URL.revokeObjectURL(afterUrl);
         afterUrl = URL.createObjectURL(out.blob);
@@ -440,12 +447,13 @@ import { PROVIDERS } from '../lib/cloud';
         maskToggle.checked = false;
 
         const coverageNote = ` · mask ${Math.round(out.coverage * 100)}%`;
+        const matteNote = out.matteMs > 0 ? ` · matte ${fmt(out.matteMs)}` : '';
         const scaleNote = out.scaled
           ? ' · scaled to 40 MP'
           : decoded.downscaled
             ? ' · phone ne 2048px par decode kiya'
             : '';
-        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}${cleanNote}${scaleNote}${coverageNote}`;
+        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}${cleanNote}${scaleNote}${coverageNote}${matteNote}`;
         addBench(out.modelLabel, out.device, out.loadMs, out.inferMs);
         setStatus(`Done — ${fmt(out.inferMs)} inference, full resolution PNG ready.`);
       } catch (error) {

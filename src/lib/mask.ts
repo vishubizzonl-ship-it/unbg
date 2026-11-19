@@ -82,6 +82,29 @@ export function erode(plane: Plane, radius = 1): void {
   }
 }
 
+/**
+ * Trimap for a matting model: 255 = certain foreground, 0 = certain background,
+ * 128 = unknown (the band the matting network is allowed to decide).
+ *
+ * The band is what makes matting worth it — inside it the network sees the real
+ * pixels of hair and glass instead of a 1024-pixel guess.
+ */
+export function trimap(plane: Plane, bandPx = 6): Uint8Array {
+  const { data, width, height } = plane;
+  const fg = { data: Float32Array.from(data), width, height };
+  const bg = { data: Float32Array.from(data, (v) => 1 - v), width, height };
+  erode(fg, bandPx);
+  erode(bg, bandPx);
+
+  const out = new Uint8Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    if (fg.data[i] > 0.9) out[i] = 255;
+    else if (bg.data[i] > 0.9) out[i] = 0;
+    else out[i] = 128;
+  }
+  return out;
+}
+
 /** Flip the mask (1 − v). */
 export function invert(plane: Plane): void {
   const { data } = plane;
