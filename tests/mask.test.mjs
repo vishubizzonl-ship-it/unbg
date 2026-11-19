@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cleanMask, labelComponents, binarize, keepLargest, fillHoles, feather,
-  coverage, borderCoverage, looksInverted, invert,
+  coverage, borderCoverage, looksInverted, invert, erode,
 } from '../dist-test/mask.js';
 
 const makePlane = (w, h, fill = 0) => ({ data: new Float32Array(w * h).fill(fill), width: w, height: h });
@@ -91,4 +91,22 @@ test('coverage reports the kept share, and invert flips it', () => {
   assert.equal(coverage(p), 0.5);
   assert.equal(at(p, 0, 0), 0);
   assert.equal(at(p, 19, 19), 1);
+});
+
+// Erode eats the one-pixel halo that survives around hair.
+test('erode shrinks the kept region by the radius and keeps the core', () => {
+  const p = makePlane(24, 24);
+  rect(p, 8, 8, 16, 16);
+  erode(p, 1);
+  assert.equal(at(p, 8, 8), 0, 'corner eaten');
+  assert.equal(at(p, 12, 12), 1, 'core kept');
+  assert.equal(at(p, 7, 7), 0, 'outside stays empty');
+});
+
+test('erode with radius 0 changes nothing', () => {
+  const p = makePlane(12, 12);
+  rect(p, 4, 4, 8, 8);
+  const before = Float32Array.from(p.data);
+  erode(p, 0);
+  assert.deepEqual(Array.from(p.data), Array.from(before));
 });

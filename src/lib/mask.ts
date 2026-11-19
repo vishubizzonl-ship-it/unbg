@@ -53,6 +53,35 @@ export function looksInverted(plane: Plane): boolean {
   return borderCoverage(plane) > 0.6 && coverage(plane) > 0.5;
 }
 
+/**
+ * Minimum filter: shrink the kept region by `radius` pixels.
+ *
+ * This is the antidote to a rim of background left around hair — the model
+ * keeps a one-pixel halo, and eating that pixel removes the halo without
+ * touching the silhouette much.
+ */
+export function erode(plane: Plane, radius = 1): void {
+  const { data, width, height } = plane;
+  if (radius <= 0) return;
+  const source = Float32Array.from(data);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let min = source[y * width + x];
+      for (let dy = -radius; dy <= radius && min > 0; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= height) continue;
+        for (let dx = -radius; dx <= radius; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= width) continue;
+          const v = source[yy * width + xx];
+          if (v < min) min = v;
+        }
+      }
+      data[y * width + x] = min;
+    }
+  }
+}
+
 /** Flip the mask (1 − v). */
 export function invert(plane: Plane): void {
   const { data } = plane;

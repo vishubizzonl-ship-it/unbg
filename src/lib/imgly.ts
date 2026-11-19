@@ -8,7 +8,12 @@
 
 import type { ImglyMessage, ImglyRequest } from '../workers/imgly.worker';
 
-export const IMGLY_MODEL_ID = 'imgly/isnet-quint8';
+export const IMGLY_MODEL_PREFIX = 'imgly/';
+
+/** Model list id → the library's `model` option. */
+export function imglyModelFor(id: string): ImglyRequest['model'] {
+  return id.endsWith('quint8') ? 'isnet_quint8' : 'isnet_fp16';
+}
 
 export interface ImglyResult {
   blob: Blob;

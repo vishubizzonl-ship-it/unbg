@@ -187,7 +187,8 @@ import { PROVIDERS } from '../lib/cloud';
 <script>
   import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, type BgModel } from '../lib/models';
   import { decodeImage, removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
-  import { removeBackgroundImgly, IMGLY_MODEL_ID } from '../lib/imgly';
+  import { removeBackgroundImgly, imglyModelFor, IMGLY_MODEL_PREFIX } from '../lib/imgly';
+  import { refineCutout } from '../lib/refine';
   import { removeBackgroundPuter, puterError, PUTER_MODEL_ID } from '../lib/puter';
   import {
     isCloudModel,
@@ -395,19 +396,29 @@ import { PROVIDERS } from '../lib/cloud';
           return;
         }
 
-        if (select.value === IMGLY_MODEL_ID) {
-          const out = await removeBackgroundImgly(file, 'isnet_quint8', (percent, label) =>
+        if (select.value.startsWith(IMGLY_MODEL_PREFIX)) {
+          const out = await removeBackgroundImgly(file, imglyModelFor(select.value), (percent, label) =>
             setStatus(`${label}… ${percent}%`),
           );
+          // The library returns a finished PNG, so the halo around hair is
+          // still in it: run our own morphology on the alpha channel.
+          let blob = out.blob;
+          let note = '';
+          if (cleanToggle.checked) {
+            setStatus('Edges saaf kar raha hoon — halo aur stray spots…');
+            const refined = await refineCutout(out.blob, { clean: true, erodePx: 1 });
+            blob = refined.blob;
+            note = ` · mask ${Math.round(refined.coverage * 100)}%`;
+          }
           if (afterUrl) URL.revokeObjectURL(afterUrl);
-          afterUrl = URL.createObjectURL(out.blob);
+          afterUrl = URL.createObjectURL(blob);
           after.src = afterUrl;
           download.href = afterUrl;
           download.setAttribute('download', 'unbg-imgly.png');
-          const size = await measure(out.blob);
-          timing.textContent = `IMG.LY isnet · web worker · ${(out.ms / 1000).toFixed(1)}s · ${size}`;
-          addBench('IMG.LY isnet (worker)', 'worker', out.ms, out.ms);
-          setStatus(`Done — IMG.LY worker finished in ${(out.ms / 1000).toFixed(1)}s.`);
+          const size = await measure(blob);
+          timing.textContent = `IMG.LY ${imglyModelFor(select.value)} · web worker · ${(out.ms / 1000).toFixed(1)}s · ${size}${note}`;
+          addBench(`IMG.LY ${imglyModelFor(select.value)} (worker)`, 'worker', out.ms, out.ms);
+          setStatus(`Done — IMG.LY ${(out.ms / 1000).toFixed(1)}s, edges refined.`);
           return;
         }
 
