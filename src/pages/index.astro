@@ -1,0 +1,96 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const stack = [
+  { name: 'Astro 7', detail: 'Island architecture, zero JS by default', tag: 'framework' },
+  { name: 'Tailwind CSS 4', detail: 'CSS-first config, @tailwindcss/vite plugin', tag: 'styling' },
+  { name: 'Vercel Design', detail: 'DESIGN.md tokens — ink on near-white canvas', tag: 'design' },
+  { name: 'Astro Docs MCP', detail: 'Live docs via mcp.docs.astro.build', tag: 'ai' },
+];
+
+const skills = [
+  { name: 'web-design-guidelines', from: 'vercel-labs/agent-skills' },
+  { name: 'tailwind-4-docs', from: 'lombiq/tailwind-agent-skills' },
+];
+---
+
+<Layout title="unbg — Astro + Tailwind 4">
+  <main class="mx-auto max-w-5xl px-6 pb-24">
+    <!-- hero -->
+    <section class="relative pt-24 pb-16">
+      <div
+        class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-64 opacity-40 blur-3xl"
+        style="background-image: radial-gradient(at 20% 40%, #007cf0 0px, transparent 55%), radial-gradient(at 50% 10%, #7928ca 0px, transparent 50%), radial-gradient(at 75% 45%, #ff0080 0px, transparent 50%), radial-gradient(at 90% 25%, #f9cb28 0px, transparent 45%);"
+      >
+      </div>
+
+      <p class="mb-5 font-mono text-xs tracking-widest text-[#888888] uppercase">
+        unbg · setup complete
+      </p>
+      <h1
+        class="max-w-3xl text-5xl font-semibold tracking-[-2.4px] text-balance sm:text-6xl"
+      >
+        Astro, Tailwind 4 aur agent skills — sab ready.
+      </h1>
+      <p class="mt-6 max-w-xl text-lg leading-7 text-[#4d4d4d]">
+        Ye page isliye bana hai taaki pura toolchain verify ho jaye: build, styles,
+        design tokens, skills aur docs MCP.
+      </p>
+
+      <div class="mt-8 flex flex-wrap items-center gap-3">
+        <a
+          href="https://docs.astro.build/en/getting-started/"
+          class="rounded-full bg-[#171717] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#383838]"
+        >
+          Astro docs
+        </a>
+        <a
+          href="https://tailwindcss.com/docs"
+          class="rounded-full border border-[#ebebeb] px-5 py-2.5 text-sm font-medium transition hover:border-[#a1a1a1]"
+        >
+          Tailwind docs
+        </a>
+      </div>
+    </section>
+
+    <!-- stack grid -->
+    <section class="border-t border-[#ebebeb] pt-12">
+      <h2 class="text-xs font-medium tracking-widest text-[#888888] uppercase">Installed</h2>
+      <ul class="mt-6 grid gap-px overflow-hidden rounded-xl bg-[#ebebeb] sm:grid-cols-2">
+        {
+          stack.map((item) => (
+            <li class="bg-white p-6">
+              <div class="flex items-baseline justify-between gap-3">
+                <h3 class="text-base font-semibold tracking-[-0.4px]">{item.name}</h3>
+                <span class="font-mono text-[10px] tracking-wider text-[#888888] uppercase">
+                  {item.tag}
+                </span>
+              </div>
+              <p class="mt-2 text-sm leading-6 text-[#4d4d4d]">{item.detail}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <!-- skills -->
+    <section class="mt-12 border-t border-[#ebebeb] pt-12">
+      <h2 class="text-xs font-medium tracking-widest text-[#888888] uppercase">Agent skills</h2>
+      <div class="mt-6 flex flex-wrap gap-3">
+        {
+          skills.map((skill) => (
+            <div class="rounded-lg border border-[#ebebeb] px-4 py-3">
+              <p class="font-mono text-sm">{skill.name}</p>
+              <p class="mt-1 text-xs text-[#888888]">{skill.from}</p>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <footer class="mt-16 flex flex-wrap items-center justify-between gap-2 border-t border-[#ebebeb] pt-6 text-xs text-[#888888]">
+      <span class="font-mono">unbg</span>
+      <span>Built with Astro · Tailwind CSS 4</span>
+    </footer>
+  </main>
+</Layout>
