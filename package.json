@@ -16,5 +16,9 @@
     "@tailwindcss/vite": "^4.3.5",
     "astro": "^7.4.13",
     "tailwindcss": "^4.3.5"
+  },
+  "overrides": {
+    "onnxruntime-node": "file:./stubs/onnxruntime-node",
+    "sharp": "file:./stubs/sharp"
   }
 }

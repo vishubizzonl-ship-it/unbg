@@ -39,6 +39,43 @@ unbg/
     └── styles/global.css      # @theme tokens from DESIGN.md + base/components layer
 ```
 
+## Run it (Termux / Android) — one command, then just `unbg`
+
+```bash
+# 1) once: install the launcher (repo is private, so the raw fetch needs the token)
+TOK=<your-github-token>
+curl -fsSL -H "Authorization: Bearer $TOK" \
+  https://raw.githubusercontent.com/vishubizzonl-ship-it/unbg/main/scripts/termux-setup.sh \
+  -o "$PREFIX/bin/unbg" && chmod +x "$PREFIX/bin/unbg" && UNBG_TOKEN=$TOK unbg
+
+# 2) from now on, every time:
+unbg
+```
+
+`unbg` fetches the latest `main` (fast-forward), reinstalls `node_modules` **only**
+when `package.json` changed, starts the dev server **detached** in a restart loop,
+and opens the browser. No `git pull`, no `npm install` by hand.
+
+| Command | Does |
+|---|---|
+| `unbg` | setup + start (auto-update included) |
+| `unbg status` | is the server up? |
+| `unbg logs` | follow the server log |
+| `unbg stop` / `unbg restart` | obvious |
+| `unbg update` | pull + reinstall, no start |
+
+Environment overrides: `UNBG_DIR` (default `~/unbg`), `UNBG_PORT` (default `4321`),
+`UNBG_TOKEN` (saved once to `~/.unbg-token`, `chmod 600`).
+
+**Why `--ignore-scripts`:** `onnxruntime-node`'s postinstall downloads a Linux/CUDA
+binary that has no Android build. `stubs/` replaces `onnxruntime-node` and `sharp`
+with empty packages via npm `overrides`, so the install is ~342 MB instead of ~700 MB
+and skips the native download entirely. The browser path is unaffected — it uses
+`onnxruntime-web`.
+
+**Phone reality check:** the heavy models (BiRefNet, RMBG-1.4) need 100 MB+ of weights
+and a GPU. On a mid-range phone start with **MODNet** (7 MB), then try RMBG-1.4.
+
 ## On-device models (Phase 2)
 
 Everything runs in the browser via `@huggingface/transformers` → `onnxruntime-web`

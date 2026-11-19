@@ -1,0 +1,1 @@
+{"name":"onnxruntime-node","version":"1.30.0","main":"index.js","description":"Stub: unbg runs models in the browser, so the Node native runtime is never needed. Keeps Termux installs ~350 MB lighter."}
