@@ -9,3 +9,6 @@ selftest-card.jpg
 __pycache__/
 .pytest_cache/
 .venv/
+# any cutout written next to the code
+*.png
+!docs/**/*.png
