@@ -9,7 +9,14 @@
  */
 
 import { MODELS, type BgModel } from './models';
-import { cleanMask, coverage, invert, looksInverted, type CleanupReport } from './mask';
+import {
+  borderCoverage,
+  cleanMask,
+  coverage,
+  invert,
+  looksInverted,
+  type CleanupReport,
+} from './mask';
 import { decodeImage, DecodeError, formatLabel, isBrowserDecodable, type DecodedImage } from './decode';
 import { matteRefine } from './matte';
 
@@ -42,14 +49,51 @@ export interface Removal {
   maskBlob: Blob | null;
   /** Wall time spent in ViTMatte, 0 when matting was off or skipped. */
   matteMs: number;
+  /**
+   * Set when the mask kept (nearly) the whole photo or threw it all away — i.e.
+   * the model did not find the subject. Never silently ship such a cutout.
+   */
+  maskWarning: MaskProblem | null;
+  /** Label of the stronger model that was retried automatically, if any. */
+  autoUpgraded: string | null;
 }
+
+export type MaskProblem = 'kept-all' | 'kept-none';
+
 
 type Libs = typeof import('@huggingface/transformers');
 let libsPromise: Promise<Libs> | null = null;
 
+/**
+ * In a bundled build, onnxruntime's proxy worker is created from
+ * `import.meta.url` — and a bundler rewrites that to the page's own chunk, so the
+ * worker boots our UI code, has no `document`, and dies before the backend
+ * starts. Loading the library from a CDN in production keeps `import.meta.url`
+ * pointing at real library code, so the proxy worker runs (and the wasm heap
+ * lives in that worker instead of the page — which is what keeps a phone alive).
+ *
+ * The bundled copy stays as the fallback: it works with the proxy switched off.
+ */
+const TRANSFORMERS_CDN = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/+esm';
+
+/** True when the AI stack came from the CDN and the proxy worker is safe. */
+let libsFromCdn = false;
+
 /** Lazily import the AI stack (keeps the home page JS-free). */
 function libs(): Promise<Libs> {
-  libsPromise ??= import('@huggingface/transformers');
+  libsPromise ??= (async () => {
+    if (import.meta.env?.PROD) {
+      try {
+        const cdn = (await import(/* @vite-ignore */ TRANSFORMERS_CDN)) as Libs;
+        libsFromCdn = true;
+        return cdn;
+      } catch {
+        // Offline, blocked, or a bad version: the bundled copy still works.
+        libsFromCdn = false;
+      }
+    }
+    return (await import('@huggingface/transformers')) as Libs;
+  })();
   return libsPromise;
 }
 
@@ -97,9 +141,13 @@ async function loadModel(m: BgModel, device: string, onStage: OnStage): Promise<
 
     // Run the CPU backend inside a worker: a big model that runs out of memory
     // then fails the *worker*, not the whole tab — so we can show an error
-    // instead of a blank page.
+    // instead of a blank page. Bundlers can mangle that worker's URL though, and
+    // then the session never starts; the retry below runs it on the main thread.
+    // Run the CPU backend in onnxruntime's own worker: a model that runs out of
+    // memory then fails the worker instead of the whole tab. Only safe when the
+    // library was not bundled (see `libs`), so the fallback runs in-page.
     if (device === 'wasm') {
-      env.backends.onnx.wasm.proxy = true;
+      env.backends.onnx.wasm.proxy = libsFromCdn;
       env.backends.onnx.wasm.numThreads = 1;
     }
 
@@ -119,16 +167,20 @@ async function loadModel(m: BgModel, device: string, onStage: OnStage): Promise<
 
     // Not every repo ships every precision. Try the preferred dtype, then
     // fall back down a list instead of throwing a 404 at the user.
+    // Quality first. The 8-bit graphs are a third of the download and they show
+    // it: MODNet q8 sliced a shoe in half and kept a portrait's background,
+    // where the same model in fp32 cut both cleanly. Only a model too big to hold
+    // in fp32 gets the quantised copy first.
+    const preferQuantised = m.sizeMb >= 60;
+    const cpuOrder = preferQuantised ? ['q8', 'fp32'] : ['fp32', 'q8'];
     const candidates =
-      device === 'webgpu'
-        ? [m.dtype, 'fp16', 'fp32']
-        : // fp16 on CPU/WASM is the usual cause of runtime traps — prefer the
-          // quantised graph, then fp32, and only then fp16.
-          ['q8', 'fp32', m.dtype].filter((d) => d !== 'fp16' || m.dtype === 'fp16' && false) as string[];
+      device === 'webgpu' ? [m.dtype, 'fp16', 'fp32'] : [...cpuOrder, m.dtype];
     const dtypes = [...new Set(candidates)] as string[];
 
     let lastError: unknown = null;
-    for (const dtype of dtypes) {
+    const runOnce = async (useProxy: boolean) => {
+      env.backends.onnx.wasm.proxy = useProxy;
+      for (const dtype of dtypes) {
       try {
         const model = await AutoModel.from_pretrained(m.id, {
           device,
@@ -142,7 +194,12 @@ async function loadModel(m: BgModel, device: string, onStage: OnStage): Promise<
       } catch (error) {
         lastError = error;
       }
-    }
+      }
+      return null;
+    };
+
+    const ok = await runOnce(false);
+    if (ok) return ok;
     throw lastError instanceof Error
       ? lastError
       : new Error(`Could not load ${m.label} on ${device}`);
@@ -340,7 +397,7 @@ export function friendlyError(error: unknown, modelLabel?: string): string {
     const alreadySmallest = !!modelLabel && /modnet/i.test(modelLabel);
     const advice = alreadySmallest
       ? 'MODNet hi sabse chhota model hai, to: doosre Chrome tabs band karo, page reload karke dobara try karo, ya thodi chhoti photo daalo.'
-      : 'Model chhota karo (MODNet ~7 MB), doosre tabs band karo, aur page reload karke dobara try karo.';
+      : 'Model chhota karo (MODNet ~25 MB), doosre tabs band karo, aur page reload karke dobara try karo.';
     return `Phone ka memory khatam ho gaya. ${advice}`;
   }
   if (/backend|adapter|webgpu/i.test(message)) {
@@ -457,5 +514,42 @@ export async function removeBackground(
     invertedMask,
     maskBlob,
     matteMs,
+    maskWarning: maskLooksWrong({ coverage: kept, border: borderCoverage(finalPlane) }),
+    autoUpgraded: null,
   };
+}
+
+/**
+ * Cheap models miss on hard photos — dark hair on a dark background, the subject
+ * running out of the frame. Per the licence column in models.ts, only
+ * Apache-2.0 / MIT models may appear here.
+ */
+export const ESCALATION: Record<string, string> = {
+  'Xenova/modnet': 'onnx-community/ormbg-ONNX',
+  'onnx-community/ormbg-ONNX': 'onnx-community/BiRefNet_lite-ONNX',
+};
+
+/**
+ * Only the failures that cannot be argued with.
+ *
+ * Global coverage on its own is not evidence: a close-up portrait legitimately
+ * keeps 84 % of the frame, and calling that "the background was not removed"
+ * would be a lie the user can see through. What no real subject does is fill the
+ * frame edge *and* almost the whole photo — that is a model that found nothing.
+ */
+export function maskLooksWrong(m: { coverage: number; border: number }): MaskProblem | null {
+  if (m.coverage <= 0.01) return 'kept-none';
+  if (m.coverage >= 0.92 && m.border >= 0.75) return 'kept-all';
+  return null;
+}
+
+/**
+ * The model worth trying next, as a suggestion the *user* accepts.
+ *
+ * It is deliberately not automatic: the next model is tens of megabytes, and
+ * downloading it seconds after a cutout has already appeared is how a phone tab
+ * dies. A tap keeps the user in control of that download.
+ */
+export function upgradeSuggestion(modelId: string): string | null {
+  return ESCALATION[modelId] ?? null;
 }

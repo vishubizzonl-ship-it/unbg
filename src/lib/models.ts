@@ -146,10 +146,10 @@ export const MODELS: BgModel[] = [
   {
     id: 'Xenova/modnet',
     label: 'MODNet',
-    note: 'Portraits only, tiny download, fastest of all',
+    note: 'Portraits only, smallest download, fastest of all',
     license: 'Apache-2.0',
     licenseOk: true,
-    sizeMb: 7,
+    sizeMb: 25,
     speed: 'fast',
     scope: 'portrait',
     dtype: 'q8',
@@ -261,8 +261,8 @@ export const DEFAULT_MODEL_ID = 'onnx-community/ormbg-ONNX';
 export function recommendedModelId(device: 'webgpu' | 'wasm', hint: { mobile?: boolean } = {}): string {
   if (device === 'webgpu') return 'onnx-community/BEN2-ONNX';
   // A phone has no WebGPU and maybe 4 GB of RAM shared with the browser: an 84 MB
-  // graph is a coin flip, MODNet's 7 MB is not. Same reason the download matters on
-  // mobile data — 7 MB is a tap, 84 MB is a wait.
+  // graph is a coin flip, MODNet's 25 MB is not. Same reason the download matters
+  // on mobile data — 25 MB is a wait, 84 MB is a decision.
   if (hint.mobile) return 'Xenova/modnet';
   return DEFAULT_MODEL_ID;
 }

@@ -186,10 +186,45 @@ Everything runs in the browser via `@huggingface/transformers` → `onnxruntime-
 | RMBG-1.4 (`kittypdf/RMBG-1.4-transformersjs`) | 44 MB | Non-commercial (BRIA) | ❌ | fastest general model — testing only |
 | BiRefNet full (`onnx-community/BiRefNet-ONNX`) | 470 MB | MIT | ✅ | heaviest |
 | IS-Net (`onnx-community/ISNet-ONNX`) | 176 MB | AGPL-3.0 | ❌ | strong on complex scenes |
-| MODNet (`Xenova/modnet`) | 7 MB | Apache-2.0 | ✅ | portraits only, lightest |
+| MODNet (`Xenova/modnet`) | 25 MB | Apache-2.0 | ✅ | portraits only, lightest — what a phone gets |
 
 The UI picks the strongest model the device can actually run: **BEN2** when a
-WebGPU adapter exists, **ormbg** otherwise.
+WebGPU adapter exists, **MODNet** on a phone, **ormbg** otherwise.
+
+### Precision matters more than the model
+
+The CPU path asks for **fp32 first** and only falls back to the 8-bit graph
+(`q8`) when the full-precision copy would be too big to hold (`sizeMb >= 60`).
+That order is not an accident. In the quantised graph MODNet sliced a sneaker in
+half and left a portrait's background in place; the same weights in fp32 cut both
+cleanly. Quantisation is a download-size optimisation that this product cannot
+afford: 25 MB instead of 7 MB buys a correct cutout. Measured on
+`public/sample-clean.jpg` (sneaker, plain studio background) and
+`public/sample.jpg` (black hair, dark background):
+
+| Weights | sneaker mask | portrait mask | verdict |
+|---|---|---|---|
+| `model_quantized.onnx` (q8) | 27.9 % — sliced shoe, background kept | 84.2 % — dark background kept | unusable |
+| `model.onnx` (fp32) | 51.8 % — complete shoe | 74.2 % — hair kept, background gone | correct |
+
+### The production bundle broke onnxruntime's worker
+
+`env.backends.onnx.wasm.proxy = true` runs the CPU session inside
+onnxruntime's own worker, which is what keeps a big model from taking the whole
+tab down with it. That worker is created from `import.meta.url`, and a bundler
+rewrites `import.meta.url` to *our* chunk — so the worker booted the page's own
+code, had no `document`, and died before the backend started ("No available
+adapters" → the UI blamed WebGPU). Dev mode never showed it because Vite serves
+the library unbundled.
+
+Fix: in production the library is loaded from a CDN
+(`cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/+esm`) so the worker URL
+resolves to real library code; the bundled copy stays as an offline fallback with
+the proxy switched off. `libsFromCdn` decides which mode is safe.
+
+Also: **Alpha matting is off by default.** It pulls a second, 99 MB ViTMatte
+model on top of the first one, and on a phone that is a tab that dies right after
+showing a cutout. It is an opt-in upgrade now, labelled with its cost.
 
 ### Mask cleanup (`src/lib/mask.ts`)
 

@@ -49,7 +49,15 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
       type="button"
       class="rounded-pill border border-hairline px-xs py-xxs text-ink hover:bg-canvas-soft-2"
     >
-      Sample photo par chalao
+      Aasan sample par chalao
+    </button>
+    <button
+      id="up-sample-hard"
+      type="button"
+      class="rounded-pill border border-hairline px-xs py-xxs text-mute-ink hover:bg-canvas-soft-2"
+      title="Mushkil photo: kaale baal, kala background — chhote model yahan fail hote hain"
+    >
+      Mushkil sample
     </button>
     <span id="up-hint"></span>
   </p>
@@ -130,8 +138,11 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
     </label>
 
     <label class="mt-xs flex items-center gap-xs text-caption-mono text-body">
-      <input id="up-matte" type="checkbox" checked class="size-3.5 accent-[#171717]" />
-      <span>Alpha matting (ViTMatte) — baal, fur, sheesha; extra ~99 MB pehli baar</span>
+      <input id="up-matte" type="checkbox" class="size-3.5 accent-[#171717]" />
+      <span>
+        Alpha matting (ViTMatte) — baal, fur, sheesha; <strong>extra ~99 MB</strong> pehli
+        baar. Phone par default off: pehle cutout dekho, phir zaroorat par on karo.
+      </span>
     </label>
 
     <label class="mt-xs flex items-center gap-xs text-caption-mono text-body">
@@ -155,6 +166,14 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
     class="mt-xxs inline-flex h-9 items-center rounded-pill border border-hairline px-sm font-mono text-caption-mono text-ink hover:bg-canvas-soft-2"
   >
     On-device model par switch karo
+  </button>
+  <button
+    id="up-upgrade"
+    type="button"
+    hidden
+    class="mt-xxs inline-flex h-9 items-center rounded-pill border border-ink bg-ink px-sm font-mono text-caption-mono text-canvas hover:bg-body"
+  >
+    Bada model se dobara try karo
   </button>
 
   <!-- result -->
@@ -288,7 +307,14 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
 <script>
   import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, looksMobile, type BgModel } from '../lib/models';
 
-  import { decodeImage, removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
+  import {
+      decodeImage,
+      removeBackground,
+      detectDevice,
+      friendlyError,
+      upgradeSuggestion,
+      modelById,
+    } from '../lib/remove-bg';
   import { removeBackgroundImgly, imglyModelFor, IMGLY_MODEL_PREFIX } from '../lib/imgly';
   import { refineCutout } from '../lib/refine';
   import { removeBackgroundPuter, puterError, PUTER_MODEL_ID } from '../lib/puter';
@@ -311,7 +337,7 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
     PROVIDERS,
   } from '../lib/cloud';
 
-  // Phones get the 7 MB model: no WebGPU, less RAM, and mobile data is not free.
+  // Phones get the smallest model: no WebGPU, less RAM, and mobile data is not free.
   const MOBILE = looksMobile(
     navigator.userAgent,
     typeof matchMedia === 'function' ? matchMedia('(pointer: coarse)').matches : false,
@@ -332,7 +358,9 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
     const status = $('up-status')!;
     const fallback = $<HTMLButtonElement>('up-fallback')!;
     const sampleButton = $<HTMLButtonElement>('up-sample')!;
+    const sampleHardButton = $<HTMLButtonElement>('up-sample-hard')!;
     const hint = $('up-hint')!;
+    const upgrade = $('up-upgrade') as HTMLButtonElement;
     const result = $('up-result')!;
     const before = $<HTMLImageElement>('up-before')!;
     const after = $<HTMLImageElement>('up-after')!;
@@ -555,10 +583,21 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
     updateNote();
 
     hint.textContent = MOBILE
-      ? 'phone detected — MODNet (7 MB) sabse safe hai'
+      ? 'phone detected — MODNet (25 MB) sabse safe hai'
       : 'desktop — ormbg (84 MB) default hai';
 
     /** Nudge the user back to something that works on this device. */
+    upgrade.addEventListener('click', () => {
+      const next = upgradeSuggestion(select.value);
+      if (!next) return;
+      select.value = next;
+      userPickedModel = true;
+      updateNote();
+      upgrade.hidden = true;
+      setStatus(`${model().label} load ho raha hai — pehli baar bada download ho sakta hai…`);
+      if (currentFile) void run(currentFile);
+    });
+
     function offerFallback(show: boolean) {
       fallback.hidden = !show;
     }
@@ -718,6 +757,7 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
           return;
         }
 
+        upgrade.hidden = true;
         const out = await removeBackground(decoded, select.value, ({ message }) => setStatus(message), {
           device,
           clean: cleanToggle.checked,
@@ -738,15 +778,34 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
         maskToggle.checked = false;
 
         const coverageNote = ` · mask ${Math.round(out.coverage * 100)}%`;
+        const upgradeNote = out.autoUpgraded ? ` · ${out.autoUpgraded} se retry` : '';
         const matteNote = out.matteMs > 0 ? ` · matte ${fmt(out.matteMs)}` : '';
         const scaleNote = out.scaled
           ? ' · scaled to 40 MP'
           : decoded.downscaled
             ? ' · phone ne 2048px par decode kiya'
             : '';
-        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}${cleanNote}${scaleNote}${coverageNote}${matteNote}`;
+        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}${cleanNote}${scaleNote}${coverageNote}${upgradeNote}${matteNote}${out.maskWarning ? ' · ⚠ mask ko check karo' : ''}`;
         addBench(out.modelLabel, out.device, out.loadMs, out.inferMs);
-        setStatus(`Done — ${fmt(out.inferMs)} inference, full resolution PNG ready.`);
+        const suggestion = out.maskWarning ? upgradeSuggestion(select.value) : null;
+        upgrade.hidden = !suggestion;
+        if (suggestion) {
+          upgrade.textContent = `Bada model se dobara try karo — ${modelById(suggestion).label} (${modelById(suggestion).sizeMb} MB)`;
+        }
+        if (out.maskWarning) {
+          setStatus(
+            out.maskWarning === 'kept-all'
+              ? `Background pura nahi hata (mask ${Math.round(out.coverage * 100)}%). Neeche se bada model chuno — ya photo plain background par, thodi door se lo.`
+              : `Subject bhi cut gaya. Bada model chuno, ya photo dobara lo.`,
+            'error',
+          );
+        } else {
+          setStatus(
+            out.autoUpgraded
+              ? `Done — ${out.modelLabel} se theek nahi hua, ${out.autoUpgraded} se dobara chalaya. Full resolution PNG ready.`
+              : `Done — ${fmt(out.inferMs)} inference, full resolution PNG ready.`,
+          );
+        }
       } catch (error) {
         const message =
           error instanceof ServerError
@@ -785,21 +844,25 @@ const SERVER_MODELS = MODELS.filter((m) => m.engine === 'server');
 
     // One tap, no file picker, no photo of your own: the whole pipeline from the repo's
     // own sample image. This is the fastest way to see whether the app works on a device.
-    sampleButton.addEventListener('click', async () => {
+    async function runSample(url: string, button: HTMLButtonElement) {
       if (busy) return;
-      sampleButton.disabled = true;
+      button.disabled = true;
       try {
         setStatus('Sample photo la raha hoon…');
-        const response = await fetch('/sample.jpg');
+        const response = await fetch(url);
         if (!response.ok) throw new Error(`sample ${response.status}`);
         const blob = await response.blob();
-        await run(new File([blob], 'sample.jpg', { type: 'image/jpeg' }));
+        const name = url.split('/').pop() || 'sample.jpg';
+        await run(new File([blob], name, { type: 'image/jpeg' }));
       } catch (error) {
         setStatus(`Sample nahi mila: ${error instanceof Error ? error.message : error}`, 'error');
       } finally {
-        sampleButton.disabled = false;
+        button.disabled = false;
       }
-    });
+    }
+
+    sampleButton.addEventListener('click', () => runSample('/sample-clean.jpg', sampleButton));
+    sampleHardButton.addEventListener('click', () => runSample('/sample.jpg', sampleHardButton));
 
     for (const type of ['dragenter', 'dragover'] as const) {
       drop.addEventListener(type, (event) => {
