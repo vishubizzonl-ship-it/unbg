@@ -15,7 +15,15 @@ set -uo pipefail
 
 APP_DIR="${UNBG_DIR:-$HOME/unbg}"
 PORT="${UNBG_PORT:-4321}"
-CHECK_INTERVAL="${UNBG_CHECK_INTERVAL:-180}"
+INTERVAL_FILE="$HOME/.unbg-interval"
+if [ -n "${UNBG_CHECK_INTERVAL:-}" ]; then
+  CHECK_INTERVAL="$UNBG_CHECK_INTERVAL"
+elif [ -s "$INTERVAL_FILE" ]; then
+  CHECK_INTERVAL="$(tr -dc '0-9' <"$INTERVAL_FILE")"
+else
+  CHECK_INTERVAL=180
+fi
+[ "${CHECK_INTERVAL:-0}" -ge 1 ] 2>/dev/null || CHECK_INTERVAL=180
 TOKEN_FILE="$HOME/.unbg-token"
 LOG_FILE="${UNBG_LOG:-$HOME/.unbg-server.log}"
 BRANCH="main"
@@ -56,6 +64,14 @@ start_child() {
   log "dev server started (pid $CHILD, port $PORT)"
 }
 
+# One tiny request: what commit does origin/main point at right now?
+remote_sha() {
+  local tok; tok="$(token)"
+  [ -n "$tok" ] || return 1
+  git ls-remote --heads "https://x-access-token:${tok}@github.com/vishubizzonl-ship-it/unbg.git" "$BRANCH" 2>/dev/null \
+    | awk '{print $1}'
+}
+
 # Fast-forward to origin/main. Returns 0 when the working tree moved.
 pull_update() {
   local tok; tok="$(token)"
@@ -64,6 +80,11 @@ pull_update() {
   local url="https://x-access-token:${tok}@github.com/vishubizzonl-ship-it/unbg.git"
   local before after
   before="$(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null)" || return 1
+
+  # Skip the fetch entirely when the remote SHA matches what we already have.
+  local probe
+  probe="$(remote_sha)"
+  [ -n "$probe" ] && [ "$probe" != "$before" ] || return 1
 
   git -C "$APP_DIR" fetch --quiet "$url" "$BRANCH" 2>/dev/null || {
     log "fetch failed (network/token) — retrying next tick"
@@ -94,11 +115,14 @@ pull_update() {
 }
 
 log "supervisor up — app=$APP_DIR port=$PORT check=${CHECK_INTERVAL}s"
+if [ "$CHECK_INTERVAL" -le 2 ]; then
+  log "WARNING: ${CHECK_INTERVAL}s polling = ~$((86400 / CHECK_INTERVAL)) GitHub requests/day; expect battery + data use"
+fi
 start_child
 last_check=$(date +%s)
 
 while true; do
-  sleep 3
+  sleep 1
 
   if [ "$CHILD" != "0" ] && ! kill -0 "$CHILD" 2>/dev/null; then
     log "dev server exited — restarting"

@@ -87,6 +87,23 @@ no deploy, no manual `git pull`, no restart. Progress is logged to
 UNBG_CHECK_INTERVAL=60 unbg restart    # check every minute instead of 3
 ```
 
+### Poll rate — down to one second
+
+```bash
+unbg live 1      # near real-time (≈86,400 GitHub requests/day)
+unbg live 10     # sensible balance
+unbg live 180    # default
+```
+
+The supervisor never runs a full `git fetch` on every tick. It first does a single
+`git ls-remote` (one tiny request, no objects) and compares the commit SHA with
+`HEAD`; only a genuine difference triggers the fetch + fast-forward. That is what
+makes a 1-second poll survivable at all.
+
+Honest cost of `unbg live 1`: ~1 request/second while the server runs — battery,
+mobile data, and a real chance of GitHub throttling the connection. 10–30 s feels
+instant in practice for a dev loop.
+
 ### Zero-command mode (Termux:Boot + widget)
 
 `unbg` installs two extra entry points on Termux, so after the one-time setup you

@@ -192,7 +192,12 @@ start_server() {
     say "Starting supervisor on port $PORT…"
     # The supervisor keeps the dev server alive *and* pulls new commits from
     # GitHub on a timer, so the site stays live and current without deploying.
-    nohup env UNBG_DIR="$APP_DIR" UNBG_PORT="$PORT" UNBG_CHECK_INTERVAL="${UNBG_CHECK_INTERVAL:-180}" \
+    local interval="${UNBG_CHECK_INTERVAL:-}"
+    if [ -z "$interval" ] && [ -s "$HOME/.unbg-interval" ]; then
+      interval="$(tr -dc '0-9' <"$HOME/.unbg-interval")"
+    fi
+    [ -n "$interval" ] || interval=180
+    nohup env UNBG_DIR="$APP_DIR" UNBG_PORT="$PORT" UNBG_CHECK_INTERVAL="$interval" \
       UNBG_LOG="$LOG_FILE" bash "$APP_DIR/scripts/unbg-watch.sh" >>"$LOG_FILE" 2>&1 &
     echo "$! $PORT" >"$PID_FILE"
     for _ in $(seq 1 40); do
@@ -204,7 +209,7 @@ start_server() {
   command -v termux-wake-lock >/dev/null && termux-wake-lock 2>/dev/null || true
 
   if healthy "$PORT"; then
-    ok "unbg is live → http://localhost:$PORT"
+    ok "unbg is live → http://localhost:$PORT (auto-update every ${UNBG_CHECK_INTERVAL:-$(cat "$HOME/.unbg-interval" 2>/dev/null || echo 180)}s)"
     notify_live
     local ip; ip="$(lan_ip)"
     [ -n "$ip" ] && ok "Same Wi-Fi par: http://$ip:$PORT"
@@ -258,6 +263,19 @@ case "${1:-start}" in
   restart)
     "$0" stop
     "$0" start
+    ;;
+  live)
+    local_s="${2:-1}"
+    case "$local_s" in ''|*[!0-9]*) die "Seconds chahiye, e.g. unbg live 1" ;; esac
+    printf '%s' "$local_s" >"$HOME/.unbg-interval"
+    ok "Poll interval set to ${local_s}s"
+    if [ "$local_s" -le 2 ]; then
+      warn "${local_s}s = ~$((86400 / local_s)) GitHub requests/day — battery aur data kharch hoga"
+      warn "Thoda kam chahiye to: unbg live 10"
+    fi
+    PORT="${UNBG_PORT:-4321}"
+    export UNBG_CHECK_INTERVAL="$local_s"
+    "$0" restart
     ;;
   autostart)
     if is_termux; then
