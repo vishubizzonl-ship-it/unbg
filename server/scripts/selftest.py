@@ -73,7 +73,8 @@ def main() -> int:
     out = source.with_name(f"{source.stem}-cutout.png")
     out.write_bytes(png)
     image = Image.open(out)
-    alpha = np.asarray(image.convert("RGBA"))[..., 3]
+    has_alpha = image.mode == "RGBA"
+    alpha = np.asarray(image.convert("RGBA"))[..., 3] if has_alpha else None
     print(f"  output      {image.width}x{image.height} {image.mode} → {out}")
     print(f"  coverage    {meta['coverage']:.1%} of pixels kept")
     print(f"  timings     {meta['timings']}")
@@ -85,6 +86,12 @@ def main() -> int:
     if meta["coverage"] > 0.99:
         print("\n✗ the mask is everything — the subject was not separated.")
         return 1
+    if alpha is None:
+        print(
+            "\n~ flat background requested, so the PNG has no alpha channel to inspect. "
+            "Open the file and check the edge by eye (or rerun with --background transparent)."
+        )
+        return 0
     corner = int(alpha[: max(1, alpha.shape[0] // 20), : max(1, alpha.shape[1] // 20)].mean())
     middle = int(alpha[alpha.shape[0] // 2 - 20 : alpha.shape[0] // 2 + 20, alpha.shape[1] // 2 - 20 : alpha.shape[1] // 2 + 20].mean())
     print(f"  corner α    {corner}   centre α {middle}")
