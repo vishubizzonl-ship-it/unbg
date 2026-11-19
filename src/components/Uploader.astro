@@ -159,7 +159,7 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
 
 <script>
   import { MODELS, DEFAULT_MODEL_ID, recommendedModelId, type BgModel } from '../lib/models';
-  import { removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
+  import { decodeImage, removeBackground, detectDevice, friendlyError } from '../lib/remove-bg';
 
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
 
@@ -248,17 +248,22 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
       busy = true;
       currentFile = file;
 
-      if (beforeUrl) URL.revokeObjectURL(beforeUrl);
-      beforeUrl = URL.createObjectURL(file);
-      before.src = beforeUrl;
       result.hidden = false;
       after.removeAttribute('src');
-      setStatus('Starting…');
+      setStatus('Reading image…');
       again.disabled = true;
       drop.setAttribute('aria-busy', 'true');
 
       try {
-        const out = await removeBackground(file, select.value, ({ message }) => setStatus(message), {
+        // Decode before a single byte of model is fetched: a HEIC photo should
+        // not cost a 209 MB download before the user is told it cannot open.
+        const decoded = await decodeImage(file);
+        if (beforeUrl) URL.revokeObjectURL(beforeUrl);
+        beforeUrl = URL.createObjectURL(decoded.preview);
+        before.src = beforeUrl;
+        before.alt = `Original image · ${decoded.width}×${decoded.height}`;
+
+        const out = await removeBackground(decoded, select.value, ({ message }) => setStatus(message), {
           device,
           clean: cleanToggle.checked,
         });
@@ -270,7 +275,12 @@ import { MODELS, DEFAULT_MODEL_ID } from '../lib/models';
         const total = out.loadMs + out.inferMs;
         const cleaned = out.cleanup.blobsRemoved + out.cleanup.holesFilled;
         const cleanNote = cleaned > 0 ? ` · cleaned ${cleaned}px` : '';
-        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}${cleanNote}`;
+        const scaleNote = out.scaled
+          ? ' · scaled to 40 MP'
+          : decoded.downscaled
+            ? ' · phone ne 2048px par decode kiya'
+            : '';
+        timing.textContent = `${out.modelLabel} · ${out.device} · ${fmt(out.inferMs)} (total ${fmt(total)}) · ${out.width}×${out.height}${cleanNote}${scaleNote}`;
         addBench(out.modelLabel, out.device, out.loadMs, out.inferMs);
         setStatus(`Done — ${fmt(out.inferMs)} inference, full resolution PNG ready.`);
       } catch (error) {

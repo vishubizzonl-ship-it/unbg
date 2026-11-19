@@ -10,6 +10,9 @@
 
 import { MODELS, type BgModel } from './models';
 import { cleanMask, type CleanupReport } from './mask';
+import { decodeImage, DecodeError, formatLabel, isBrowserDecodable, type DecodedImage } from './decode';
+
+export { decodeImage, DecodeError, type DecodedImage };
 
 export interface Stage {
   stage: 'load' | 'run' | 'done';
@@ -28,6 +31,8 @@ export interface Removal {
   device: string;
   modelLabel: string;
   cleanup: CleanupReport;
+  /** True when the canvas was capped at 40 MP. */
+  scaled: boolean;
 }
 
 type Libs = typeof import('@huggingface/transformers');
@@ -215,24 +220,12 @@ function toAlphaPlane(tensor: any): { data: Float32Array; width: number; height:
   return { data: out, width, height };
 }
 
-async function blobToImage(blob: Blob): Promise<HTMLImageElement> {
-  const url = URL.createObjectURL(blob);
-  try {
-    const img = new Image();
-    img.decoding = 'async';
-    img.src = url;
-    await img.decode();
-    return img;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
 
 /** Composite the alpha plane over the photo → transparent PNG blob. */
 async function composite(
-  image: HTMLImageElement,
+  image: DecodedImage,
   plane: { data: Float32Array; width: number; height: number },
-): Promise<{ blob: Blob; width: number; height: number }> {
+): Promise<{ blob: Blob; width: number; height: number; scaled: boolean }> {
   const { data, width, height } = plane;
 
   const maskCanvas = document.createElement('canvas');
@@ -254,13 +247,18 @@ async function composite(
   }
   mctx.putImageData(maskImage, 0, 0);
 
+  // Full resolution is the product promise, but a 100 MP canvas makes phones
+  // throw; past 40 MP we keep the aspect ratio and say so in the status line.
+  const MAX_PIXELS = 40e6;
+  const pixels = image.width * image.height;
+  const shrink = pixels > MAX_PIXELS ? Math.sqrt(MAX_PIXELS / pixels) : 1;
   const out = document.createElement('canvas');
-  out.width = image.naturalWidth || image.width;
-  out.height = image.naturalHeight || image.height;
+  out.width = Math.max(1, Math.round(image.width * shrink));
+  out.height = Math.max(1, Math.round(image.height * shrink));
   const ctx = out.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D is unavailable in this browser');
 
-  ctx.drawImage(image, 0, 0);
+  ctx.drawImage(image.canvas, 0, 0, out.width, out.height);
   ctx.globalCompositeOperation = 'destination-in';
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -270,11 +268,24 @@ async function composite(
     out.toBlob((b) => resolve(b), 'image/png'),
   );
   if (!blob) throw new Error('Could not encode the PNG');
-  return { blob, width: out.width, height: out.height };
+  return { blob, width: out.width, height: out.height, scaled: shrink < 1 };
 }
 
 /** Turn runtime noise into something a human can act on. */
 export function friendlyError(error: unknown): string {
+  if (error instanceof DecodeError) {
+    const mb =
+      error.bytes < 1024 * 1024
+        ? `${Math.max(1, Math.round(error.bytes / 1024))} KB`
+        : `${(error.bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (error.format === 'heic') {
+      return `Ye ${formatLabel(error.format)} photo hai (${mb}) — Chrome ise khol hi nahi sakta, isliye samajh nahi paaya. Gallery mein photo kholo → share/convert se JPEG banao, ya camera setting "JPEG only" kar do. (PNG/JPG/WebP seedha chalte hain.)`;
+    }
+    if (!isBrowserDecodable(error.format)) {
+      return `${formatLabel(error.format)} file browser decode nahi kar sakta (${mb}). PNG, JPG ya WebP use karein.`;
+    }
+    return `Image decode nahi hui (${formatLabel(error.format)}, ${mb}) — file kharab lagti hai. Dobara save karke ya screenshot le kar try karein.`;
+  }
   const message = error instanceof Error ? error.message : String(error);
   if (/fetch|network|Failed to load resource|Could not locate file|404/i.test(message)) {
     return 'Model download failed — network blocked or unreachable. Is page ko normal browser tab mein kholein (in-app preview iframe mein network band hota hai).';
@@ -289,7 +300,7 @@ export function friendlyError(error: unknown): string {
 }
 
 export async function removeBackground(
-  file: Blob,
+  image: DecodedImage,
   modelId: string,
   onStage: OnStage,
   options: { device?: 'webgpu' | 'wasm'; clean?: boolean } = {},
@@ -323,8 +334,10 @@ export async function removeBackground(
   const { RawImage } = await libs();
   onStage({ stage: 'run', message: 'Removing background…' });
 
-  const image = await RawImage.fromBlob(file);
-  const inputs = await processor(image);
+  // The photo was decoded once, up front — no second decode, no second chance
+  // to fail halfway through.
+  const raw = RawImage.fromCanvas(image.canvas);
+  const inputs = await processor(raw);
 
   const inferStart = performance.now();
   const output = await runModel(model, inputs);
@@ -338,10 +351,9 @@ export async function removeBackground(
   const cleanup = cleanMask(plane, { clean: options.clean ?? true, featherRadius: 1 });
 
   onStage({ stage: 'run', message: 'Compositing PNG…' });
-  const domImage = await blobToImage(file);
-  const { blob, width, height } = await composite(domImage, plane);
+  const { blob, width, height, scaled } = await composite(image, plane);
 
   onStage({ stage: 'done', message: 'Done' });
 
-  return { blob, width, height, loadMs, inferMs, device, modelLabel: m.label, cleanup };
+  return { blob, width, height, loadMs, inferMs, device, modelLabel: m.label, cleanup, scaled };
 }
