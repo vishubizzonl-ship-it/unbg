@@ -131,6 +131,7 @@ install_deps() {
     return 0
   fi
   say "Installing dependencies (first run: 1–3 minutes)…"
+  warn "Is line ke chalte hue terminal mat band karo. Ctrl+C dabaya to install aadha rahega —\n   ghabrao mat, 'unbg' dobara chalane par wahin se resume ho jata hai."
   ( cd "$APP_DIR" && npm install --ignore-scripts --no-audit --no-fund ) || die "npm install failed"
   printf '%s' "$stamp" >"$HASH_FILE"
   ok "Dependencies ready"
@@ -222,10 +223,17 @@ start_server() {
 
   if healthy "$PORT"; then
     ok "unbg is live → http://localhost:$PORT (auto-update every ${UNBG_CHECK_INTERVAL:-$(cat "$HOME/.unbg-interval" 2>/dev/null || echo 1)}s)"
+    echo
+    echo "   ────────────────────────────────────────────────"
+    echo "   AB CHROME MEIN KHOLO:  http://localhost:$PORT"
+    echo "   (address bar mein type karo — curl/terminal mein HTML"
+    echo "    source dikhna normal hai, wo render nahi karta)"
+    echo "   ────────────────────────────────────────────────"
+    echo
     notify_live
     local ip; ip="$(lan_ip)"
     [ -n "$ip" ] && ok "Same Wi-Fi par: http://$ip:$PORT"
-    echo "   logs: unbg logs   ·   stop: unbg stop"
+    echo "   logs: unbg logs   ·   stop: unbg stop   ·   kaunsa app? unbg doctor"
     command -v termux-open >/dev/null && termux-open "http://localhost:$PORT" 2>/dev/null || true
   else
     warn "Server start hua par abhi jawab nahi de raha — 'unbg logs' dekhein"
