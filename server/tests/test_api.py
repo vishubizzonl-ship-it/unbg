@@ -147,6 +147,26 @@ def test_refine_keeps_range_and_reports_steps():
     assert "refine_ms" in steps
 
 
+def test_foreground_estimation_keeps_subject_colour_and_drops_background_tint():
+    height = width = 64
+    rgb = np.full((height, width, 3), 255, dtype=np.uint8)  # white studio background
+    rgb[16:48, 16:48] = [200, 30, 30]                        # red subject
+    alpha = np.zeros((height, width), dtype=np.float32)
+    alpha[16:48, 16:48] = 1.0
+    fg = refine.estimate_foreground(rgb, alpha)
+    assert fg is not None and fg.shape == (height, width, 3)
+    centre = fg[32, 32]
+    assert centre[0] == pytest.approx(200 / 255, abs=0.03)   # red stays red
+    assert centre[1] == pytest.approx(30 / 255, abs=0.03)    # no white bleed into G/B
+    assert float(fg.max()) <= 1.0 and float(fg.min()) >= 0.0
+
+
+def test_foreground_estimation_respects_size_mismatch():
+    rgb = np.zeros((32, 32, 3), dtype=np.uint8)
+    alpha = np.zeros((16, 16), dtype=np.float32)
+    assert refine.estimate_foreground(rgb, alpha) is None
+
+
 def test_smoothstep_pushes_midtones_apart():
     out = refine._smoothstep(np.array([0.5, 0.2, 0.8], dtype=np.float32))
     assert out[0] == pytest.approx(0.5, abs=0.02)

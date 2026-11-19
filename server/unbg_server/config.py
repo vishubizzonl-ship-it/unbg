@@ -59,6 +59,7 @@ class Settings:
     # post-processing
     matte: bool = field(default_factory=lambda: _bool("UNBG_MATTE", True))
     matte_max_pixels: int = field(default_factory=lambda: _int("UNBG_MATTE_MAX_PIXELS", 2_500_000))
+    decontaminate: bool = field(default_factory=lambda: _bool("UNBG_DECONTAMINATE", True))
     feather_px: float = field(default_factory=lambda: _float("UNBG_FEATHER_PX", 0.6))
 
     # http

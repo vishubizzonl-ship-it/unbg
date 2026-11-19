@@ -13,7 +13,7 @@ import threading
 from ..config import settings
 from ..errors import UnknownModel
 from .base import Engine, EngineInfo
-from .birefnet import B512, GENERAL, LITE, PORTRAIT, BiRefNetEngine
+from .birefnet import B512, GENERAL, HR, LITE, LITE2K, MATTING, PORTRAIT, BiRefNetEngine
 from .u2net import U2NET, U2NET_P, U2NetEngine
 
 log = logging.getLogger("unbg.registry")
@@ -21,6 +21,9 @@ log = logging.getLogger("unbg.registry")
 _FACTORIES: dict[str, callable] = {
     GENERAL.id: lambda: BiRefNetEngine(GENERAL, "onnx-community/BiRefNet-ONNX"),
     PORTRAIT.id: lambda: BiRefNetEngine(PORTRAIT, "onnx-community/BiRefNet-portrait-ONNX"),
+    MATTING.id: lambda: BiRefNetEngine(MATTING, "ZhengPeng7/BiRefNet"),
+    LITE2K.id: lambda: BiRefNetEngine(LITE2K, "ZhengPeng7/BiRefNet"),
+    HR.id: lambda: BiRefNetEngine(HR, "ZhengPeng7/BiRefNet"),
     LITE.id: lambda: BiRefNetEngine(LITE, "onnx-community/BiRefNet_lite-ONNX"),
     B512.id: lambda: BiRefNetEngine(
         B512, "onnx-community/BiRefNet_512x512-ONNX", variant="model_fp16.onnx"
@@ -50,7 +53,10 @@ def get(model_id: str | None = None) -> Engine:
 _ALIASES = {
     "general": GENERAL.id,
     "portrait": PORTRAIT.id,
+    "matting": MATTING.id,
     "lite": LITE.id,
+    "hr": HR.id,
+    "2k": LITE2K.id,
     "auto": GENERAL.id,
     "birefnet": GENERAL.id,
 }

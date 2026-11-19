@@ -20,7 +20,7 @@ server/
     errors.py          one JSON error shape with correct status codes
     engines/
       base.py          Engine contract + tiled full-resolution prediction
-      birefnet.py      BiRefNet General / Portrait / 512-fp16 / Lite
+      birefnet.py      BiRefNet General / Portrait / Matting / Lite / Lite-2K / HR / 512
       u2net.py         U²-Net / U²-Net-p (drop-in ONNX)
       registry.py      the model registry — add a model here, nothing else changes
       _ort.py          ONNX Runtime session, provider chain, memory settings
@@ -50,14 +50,24 @@ curl -F "file=@photo.jpg" "http://127.0.0.1:8000/api/remove?model=birefnet-portr
 
 ## Models
 
-| id | weights | size | licence | use it for |
-|---|---|---|---|---|
-| `birefnet-general` | `onnx-community/BiRefNet-ONNX` | 972 MB | MIT | products, objects, animals, mixed scenes |
-| `birefnet-portrait` | `onnx-community/BiRefNet-portrait-ONNX` | 972 MB | MIT | people, hair, skin, glasses |
-| `birefnet-512` | `onnx-community/BiRefNet_512x512-ONNX` | 473 MB | MIT | full BiRefNet quality at half the RAM |
-| `birefnet-lite` | `onnx-community/BiRefNet_lite-ONNX` | 224 MB | MIT | fast CPU, thumbnails, batch |
-| `u2net` | any U²-Net ONNX you trust | 176 MB | Apache-2.0 | CPU-only servers |
-| `u2netp` | `u2netp.onnx` (rembg release) | 5 MB | Apache-2.0 | tiny boxes, high throughput |
+Every BiRefNet row is the **author's own ONNX export** — `ZhengPeng7/BiRefNet` release `v1`,
+MIT, no third-party conversion and no gated repo:
+
+| id | official asset | input | size | licence | use it for |
+|---|---|---|---|---|---|
+| `birefnet-general` | `BiRefNet-general-epoch_244.onnx` | 1024² | 972 MB | MIT | products, objects, animals, mixed scenes |
+| `birefnet-portrait` | `BiRefNet-portrait-epoch_150.onnx` | 1024² | 972 MB | MIT | people, hair, skin, glasses |
+| `birefnet-matting` | `BiRefNet-matting-epoch_100.onnx` | 1024² | 972 MB | MIT | soft alpha: hair, fur, veils, glass |
+| `birefnet-lite` | `BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx` | 1024² | 224 MB | MIT | fast CPU, thumbnails, batch |
+| `birefnet-lite-2k` | `BiRefNet_lite-general-2K-epoch_232.onnx` | 2560×1440 | 331 MB | MIT | big photos, more edge detail on a small budget |
+| `birefnet-hr` | `BiRefNet_HR-general-epoch_130.onnx` | 2048² | 1099 MB | MIT | 2K+ photos and print |
+| `birefnet-512` | onnx-community fp16 export | 512² | 473 MB | MIT | low-RAM machines |
+| `u2net` | any U²-Net ONNX you trust | 320² | 176 MB | Apache-2.0 | CPU-only servers |
+| `u2netp` | `u2netp.onnx` (rembg release) | 320² | 5 MB | Apache-2.0 | tiny boxes, high throughput |
+
+The 1024/2048/2560 columns are the exported, fixed input sizes; the engine reads them from the
+graph and pads/resizes to match, so you never have to tell it. Output is `1x1xHxW` logits →
+sigmoid → alpha, normalised with the author's ImageNet mean/std.
 
 `model=auto` (the default) picks `birefnet-portrait` when it is installed and the request says
 `subject=person`, otherwise the configured default. Nothing is downloaded behind your back:
@@ -90,7 +100,10 @@ Errors are always `{"error": "<code>", "message": "<what to do>"}` —
 3. **closed-form matting** (`pymatting`) re-solves alpha inside an unknown band built from the
    mask — this is what makes hair and fur survive. Skipped above `UNBG_MATTE_MAX_PIXELS`.
 4. **feather** removes the last stair-step (three box passes, no scipy).
-5. **composite** on transparent / white / any `#rrggbb`, or return the RGBA PNG untouched.
+5. **foreground decontamination** — BiRefNet's own `refine_foreground` (blur-fusion from
+   Photoroom's fast-foreground-estimation): the background colour is un-mixed out of the
+   semi-transparent pixels, so hair stops carrying a white rim onto a coloured page.
+6. **composite** on transparent / white / any `#rrggbb`, or return the RGBA PNG untouched.
 
 `detail=high` switches step 1 to tiled inference: overlapping 1024 px crops blended with a
 raised-cosine window, so a 24 MP photo keeps native edge detail instead of a 1024 px upscale.
@@ -127,6 +140,7 @@ Everything is an env var; nothing is a secret.
 | `UNBG_USE_GPU` | `1` | build a GPU provider chain when available |
 | `UNBG_MATTE` | `1` | closed-form matting on by default |
 | `UNBG_MATTE_MAX_PIXELS` | `2500000` | skip matting above this, use the network mask |
+| `UNBG_DECONTAMINATE` | `1` | un-mix background colour out of the alpha edge |
 | `UNBG_MAX_UPLOAD_BYTES` | `20971520` | 20 MB per file |
 | `UNBG_MAX_PIXELS` | `60000000` | downscale above this |
 | `UNBG_MAX_BATCH` | `8` | files per `/api/batch` call |
@@ -166,9 +180,14 @@ in production: mislabelled uploads, truncated PNGs, 60 MP phone photos, path tra
 
 ## Verified here vs. not
 
-Checked in this sandbox: 28/28 tests, U²-Net-p real inference end to end (0.3 s, 360 MB peak,
-hair preserved, transparent and `#ff8800` outputs written), model downloads, registry,
-`/api/*` responses.
+Checked in this sandbox: 30/30 tests, U²-Net-p real inference end to end (0.57 s inference,
+~360 MB peak, transparent / white / `#ff8800` outputs written), foreground decontamination
+(numerically and by eye), the official release asset loading with the exact I/O contract
+`input_image [1,3,1024,1024]` → `output_image [1,1,1024,1024]`, downloads, registry, `/api/*`.
+
+Honest note on the fallback: U²-Net-p runs at 320², and on a curly-hair portrait it loses the
+hair volume completely — that is the model, not the pipeline. Use BiRefNet (`matting` or
+`portrait`) whenever quality is the point.
 
 **Not checked here:** a full BiRefNet pass. This box has 2 GB of RAM and a 1024² BiRefNet graph
 needs 1.5–2 GB, so the process is OOM-killed (both the fp32 and fp16 builds, at 1024² and

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import time
 
+import numpy as np
+
 from . import backgrounds, io_images, refine
 from .config import settings
 from .engines import registry
@@ -18,6 +20,7 @@ def remove_background(
     model: str | None = None,
     background: str | None = None,
     matte: bool | None = None,
+    decontaminate: bool | None = None,
     detail: str = "normal",
     subject: str = "auto",
 ) -> tuple[bytes, dict]:
@@ -35,7 +38,23 @@ def remove_background(
     )
     alpha, refine_meta = refine.refine(alpha, rgb, matte=matte)
 
-    image = backgrounds.composite(rgb, alpha, colour)
+    # BiRefNet's own last step: pull the old background colour out of the alpha edge,
+    # so hair does not keep a light rim when the cutout lands on a white/coloured page.
+    use_fg = settings.decontaminate if decontaminate is None else decontaminate
+    fg_rgb = rgb
+    if use_fg and loaded.pixels <= settings.matte_max_pixels:
+        fg_started = time.perf_counter()
+        estimated = refine.estimate_foreground(rgb, alpha)
+        if estimated is not None:
+            fg_rgb = np.clip(estimated * 255.0 + 0.5, 0, 255).astype(np.uint8)
+            refine_meta["foreground"] = "blur-fusion"
+            refine_meta["foreground_ms"] = round((time.perf_counter() - fg_started) * 1000, 1)
+        else:
+            refine_meta["foreground"] = "skipped"
+    elif use_fg:
+        refine_meta["foreground"] = "skipped (image too large)"
+
+    image = backgrounds.composite(fg_rgb, alpha, colour)
     png = io_images.encode_png(image)
 
     coverage = float(alpha.mean())

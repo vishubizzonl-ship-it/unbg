@@ -4,6 +4,8 @@
     python scripts/fetch_models.py --list
     python scripts/fetch_models.py birefnet-512         # 473 MB, full BiRefNet at 512 px
     python scripts/fetch_models.py birefnet-lite        # 224 MB, fastest CPU option
+    python scripts/fetch_models.py birefnet-matting     # 972 MB, softest alpha (hair, fur)
+    python scripts/fetch_models.py birefnet-lite-2k     # 331 MB, 2560x1440 detail
     python scripts/fetch_models.py birefnet-portrait    # 972 MB, best on people
     python scripts/fetch_models.py u2netp               # 4.7 MB, from rembg's release
     python scripts/fetch_models.py all
@@ -25,12 +27,48 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from unbg_server.config import settings  # noqa: E402
 from unbg_server.engines import registry  # noqa: E402
 
-# model id -> (hugging face repo, file inside onnx/, licence note)
+# The official MIT weights. ZhengPeng7/BiRefNet's GitHub release v1 ships ONNX exports of
+# every checkpoint, so the main models do not depend on any third-party conversion.
+OFFICIAL = "https://github.com/ZhengPeng7/BiRefNet/releases/download/v1/{asset}"
+
+# model id -> (download url, filename inside models/<id>/onnx/, source label)
 REPOS = {
-    "birefnet-general": ("onnx-community/BiRefNet-ONNX", "model.onnx"),
-    "birefnet-portrait": ("onnx-community/BiRefNet-portrait-ONNX", "model.onnx"),
-    "birefnet-lite": ("onnx-community/BiRefNet_lite-ONNX", "model.onnx"),
-    "birefnet-512": ("onnx-community/BiRefNet_512x512-ONNX", "model_fp16.onnx"),
+    "birefnet-general": (
+        OFFICIAL.format(asset="BiRefNet-general-epoch_244.onnx"),
+        "model.onnx",
+        "official release (MIT)",
+    ),
+    "birefnet-portrait": (
+        OFFICIAL.format(asset="BiRefNet-portrait-epoch_150.onnx"),
+        "model.onnx",
+        "official release (MIT)",
+    ),
+    "birefnet-matting": (
+        OFFICIAL.format(asset="BiRefNet-matting-epoch_100.onnx"),
+        "model.onnx",
+        "official release (MIT)",
+    ),
+    "birefnet-lite": (
+        OFFICIAL.format(asset="BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx"),
+        "model.onnx",
+        "official release (MIT)",
+    ),
+    "birefnet-lite-2k": (
+        OFFICIAL.format(asset="BiRefNet_lite-general-2K-epoch_232.onnx"),
+        "model.onnx",
+        "official release (MIT)",
+    ),
+    "birefnet-hr": (
+        OFFICIAL.format(asset="BiRefNet_HR-general-epoch_130.onnx"),
+        "model.onnx",
+        "official release (MIT)",
+    ),
+    # fp16 export by onnx-community for machines that cannot spare a full GB
+    "birefnet-512": (
+        "https://huggingface.co/onnx-community/BiRefNet_512x512-ONNX/resolve/main/onnx/model_fp16.onnx",
+        "model_fp16.onnx",
+        "onnx-community fp16 (MIT)",
+    ),
 }
 
 # U²-Net is Apache-2.0, published by the author's ecosystem via rembg's public release.
@@ -74,14 +112,13 @@ def download(model_id: str, *, force: bool = False) -> Path:
         print(f"✓ {model_id} → {dest}")
         return dest
 
-    repo, filename = REPOS[model_id]
+    url, filename, source = REPOS[model_id]
     dest = settings.model_dir / model_id / "onnx" / filename
     dest.parent.mkdir(parents=True, exist_ok=True)
-    url = f"https://huggingface.co/{repo}/resolve/main/onnx/{filename}"
     if dest.exists() and not force:
         print(f"✓ {model_id}: already present ({human(dest.stat().st_size)})")
         return dest
-    print(f"↓ {model_id}  {repo}  ({url})")
+    print(f"↓ {model_id}  {source}  ({url})")
     _stream(url, dest)
     print(f"✓ {model_id} → {dest}")
     return dest
@@ -103,9 +140,12 @@ def main() -> int:
         print("Models:")
         for item in registry.describe():
             mark = "✓" if item["available"] else "·"
-            source = REPOS.get(item["id"], ("rembg release, Apache-2.0", ""))[0]
+            source = REPOS[item["id"]][2] if item["id"] in REPOS else "rembg release (Apache-2.0)"
             print(f"  {mark} {item['id']:<18} {item['label']:<24} {item['size_mb']:>5} MB  {source}")
-        print("\nBiRefNet weights are MIT (ZhengPeng7 + onnx-community). U²-Net is Apache-2.0.")
+        print(
+            "\nBiRefNet weights are MIT, downloaded from ZhengPeng7/BiRefNet's own release v1.\n"
+            "U²-Net is Apache-2.0 and optional."
+        )
         return 0
 
     targets = known if "all" in args.models else [m for m in args.models if m in known]

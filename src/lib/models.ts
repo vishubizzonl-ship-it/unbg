@@ -203,6 +203,18 @@ export const MODELS: BgModel[] = [
     engine: 'server',
   },
   {
+    id: 'api/birefnet-matting',
+    label: 'Server · BiRefNet Matting — softest hair',
+    note: 'Local server par matting checkpoint — baal, fur, ghunghat par sabse honest alpha',
+    license: 'MIT',
+    licenseOk: true,
+    sizeMb: 0,
+    speed: 'fast',
+    scope: 'portrait',
+    dtype: 'fp32',
+    engine: 'server',
+  },
+  {
     id: 'api/birefnet-general',
     label: 'Server · BiRefNet General — products & objects',
     note: 'Local server par general BiRefNet — products, janwar aur mixed scene par best',

@@ -1,12 +1,18 @@
 """BiRefNet — the production workhorse for both people and products.
 
-Two checkpoints of the same architecture:
-  * general  (onnx-community/BiRefNet-ONNX)          — products, objects, animals, anything
-  * portrait (onnx-community/BiRefNet-portrait-ONNX) — people, hair, skin, glasses
+The official MIT checkpoints (ZhengPeng7/BiRefNet, CAAI AIR 2024) ship as ONNX straight
+from the author's GitHub release, so nothing here depends on a third-party conversion:
 
-Both are MIT on the Hub, converted by onnx-community from ZhengPeng7's original weights.
-Input: 3xHxW RGB, ImageNet normalisation, H/W divisible by 32.
-Output: 1x1xHxW logits -> sigmoid -> alpha.
+  * general    — products, objects, animals, anything (1024x1024)
+  * portrait   — people, hair, skin, glasses (1024x1024)
+  * matting    — trimap-free matting, the best soft-alpha output (1024x1024)
+  * lite       — swin-v1-tiny, 224 MB, 1024x1024 (CPU-friendly)
+  * lite-2k    — 2560x1440 input, 331 MB (detail on large photos, low memory)
+  * HR         — 2048x2048, 1.1 GB (the highest-resolution general model)
+  * 512        — onnx-community fp16 export, 473 MB (low-RAM machines)
+
+Input: 3xHxW RGB, ImageNet normalisation (mean .485/.456/.406, std .229/.224/.225),
+exactly as the author's `transform_image` does it. Output: 1x1xHxW logits -> sigmoid.
 """
 
 from __future__ import annotations
@@ -119,6 +125,39 @@ B512 = EngineInfo(
     best_for="full BiRefNet quality on low-RAM machines",
     notes="Same weights, exported for 512x512 input in fp16 — ~half the RAM of the 1024 build.",
     files=("onnx/model_fp16.onnx",),
+)
+
+MATTING = EngineInfo(
+    id="birefnet-matting",
+    label="BiRefNet Matting",
+    family="BiRefNet",
+    license="MIT",
+    size_mb=972,
+    best_for="hair, fur, veils, glass — soft alpha edges",
+    notes="Trimap-free matting checkpoint; softest, most honest alpha of the family.",
+    files=("onnx/model.onnx",),
+)
+
+LITE2K = EngineInfo(
+    id="birefnet-lite-2k",
+    label="BiRefNet Lite 2K",
+    family="BiRefNet",
+    license="MIT",
+    size_mb=331,
+    best_for="big photos with fine detail on a small budget",
+    notes="2560x1440 input at 331 MB — more edge detail than the 1024 lite, less RAM than HR.",
+    files=("onnx/model.onnx",),
+)
+
+HR = EngineInfo(
+    id="birefnet-hr",
+    label="BiRefNet HR (2048)",
+    family="BiRefNet",
+    license="MIT",
+    size_mb=1099,
+    best_for="2K+ photos, print, product macro",
+    notes="Trained at 2048x2048 — the sharpest general model; needs ~4 GB+ of RAM.",
+    files=("onnx/model.onnx",),
 )
 
 LITE = EngineInfo(

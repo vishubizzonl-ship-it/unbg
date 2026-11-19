@@ -313,8 +313,8 @@ What the server adds on top of the browser engine:
 
 | | browser | local server |
 |---|---|---|
-| models | 9 on-device + 4 remote | BiRefNet General / Portrait / 512 / Lite, U²-Net, U²-Net-p |
-| weights | ≤ 366 MB, WebGPU-bound | full 972 MB fp32 BiRefNet |
+| models | 9 on-device + 4 remote | BiRefNet General / Portrait / Matting / Lite / Lite-2K / HR / 512, U²-Net, U²-Net-p |
+| weights | ≤ 366 MB, WebGPU-bound | the author's own ONNX release — full 972 MB fp32, 2K and 2048 px variants (MIT) |
 | matting | ViTMatte (99 MB) | closed-form matting (pymatting) on the mask |
 | big photos | one pass, downscaled | `detail=high` → tiled 1024 px crops, native detail |
 | batch | one at a time | `POST /api/batch`, 8 files, per-file JSON |

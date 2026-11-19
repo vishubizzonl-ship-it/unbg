@@ -148,6 +148,9 @@ async def remove(
     model: str = Query("auto", description="model id, or 'auto'"),
     background: str = Query("transparent", description="transparent | white | #rrggbb"),
     matte: bool = Query(True, description="closed-form alpha matting for hair"),
+    decontaminate: bool = Query(
+        True, description="un-mix the background colour out of the alpha edge (no white halo)"
+    ),
     detail: str = Query("normal", description="normal | high (tiled, keeps native detail)"),
     subject: str = Query("auto", description="auto | person | object"),
     store: bool = Query(False, description="also keep a /results/{id}.png copy"),
@@ -158,7 +161,13 @@ async def remove(
     if detail not in {"normal", "high"}:
         raise UnbgError("detail must be 'normal' or 'high'", code="bad_detail")
     png, meta = await _run(
-        data, model=model, background=background, matte=matte, detail=detail, subject=subject
+        data,
+        model=model,
+        background=background,
+        matte=matte,
+        decontaminate=decontaminate,
+        detail=detail,
+        subject=subject,
     )
 
     headers = {
@@ -189,6 +198,7 @@ async def batch(
     model: str = Query("auto"),
     background: str = Query("transparent"),
     matte: bool = Query(True),
+    decontaminate: bool = Query(True),
     detail: str = Query("normal"),
     subject: str = Query("auto"),
 ):
@@ -203,7 +213,13 @@ async def batch(
         try:
             data = await upload.read()
             png, meta = await _run(
-                data, model=model, background=background, matte=matte, detail=detail, subject=subject
+                data,
+                model=model,
+                background=background,
+                matte=matte,
+                decontaminate=decontaminate,
+                detail=detail,
+                subject=subject,
             )
             token = uuid.uuid4().hex
             (settings.result_dir / f"{token}.png").write_bytes(png)

@@ -7,6 +7,10 @@ step turn it into a cutout that survives a close look:
 2. closed-form matting     — pymatting solves per-pixel alpha inside an unknown band,
                              which is what makes hair and fur look right
 3. gaussian feather        — removes the last pixel of stair-stepping
+4. foreground estimation   — un-mixes the background colour out of semi-transparent
+                             pixels, exactly like BiRefNet's official `refine_foreground`
+                             (Photoroom fast-foreground-estimation, blur fusion). This is
+                             what kills the white halo when a cutout lands on a colour.
 
 Every step is skippable and is reported back in the response metadata.
 """
@@ -61,6 +65,66 @@ def _box_blur(plane: np.ndarray, radius: int) -> np.ndarray:
         lo = np.take(summed, np.arange(0, summed.shape[axis] - k), axis=axis)
         out = ((hi - lo) / k).astype(np.float32)
     return out
+
+
+def _box_blur_kernel(plane: np.ndarray, kernel: int) -> np.ndarray:
+    """Box blur with an exact kernel size, i.e. an O(n) replacement for cv2.blur(p, (k, k))."""
+    k = max(1, int(kernel))
+    if k % 2 == 0:
+        k += 1
+    radius = k // 2
+    out = np.asarray(plane, dtype=np.float32)
+    for axis in (0, 1):
+        pad = [(0, 0), (0, 0)]
+        pad[axis] = (radius, radius)
+        padded = np.pad(out, pad, mode="edge")
+        summed = np.cumsum(padded, axis=axis, dtype=np.float64)
+        zero_shape = list(summed.shape)
+        zero_shape[axis] = 1
+        summed = np.concatenate([np.zeros(zero_shape), summed], axis=axis)
+        hi = np.take(summed, np.arange(k, summed.shape[axis]), axis=axis)
+        lo = np.take(summed, np.arange(0, summed.shape[axis] - k), axis=axis)
+        out = ((hi - lo) / k).astype(np.float32)
+    return out
+
+
+def _fb_blur_fusion(image: np.ndarray, fg: np.ndarray, bg: np.ndarray, alpha: np.ndarray, r: int) -> tuple[np.ndarray, np.ndarray]:
+    """One step of the blur-fusion foreground estimator (Photoroom, MIT)."""
+    a = alpha[..., None] if alpha.ndim == 2 else alpha
+    blurred_alpha = _box_blur_kernel(a[:, :, 0], r)[..., None]
+
+    blurred_fga = np.stack([_box_blur_kernel(fg[..., i] * a[:, :, 0], r) for i in range(3)], axis=-1)
+    blurred_fg = blurred_fga / (blurred_alpha + 1e-5)
+
+    blurred_b1a = np.stack([_box_blur_kernel(bg[..., i] * (1.0 - a[:, :, 0]), r) for i in range(3)], axis=-1)
+    blurred_bg = blurred_b1a / ((1.0 - blurred_alpha) + 1e-5)
+
+    out = blurred_fg + a * (image - a * blurred_fg - (1.0 - a) * blurred_bg)
+    return np.clip(out, 0.0, 1.0), blurred_bg
+
+
+def estimate_foreground(rgb: np.ndarray, alpha: np.ndarray, r: int = 90) -> np.ndarray | None:
+    """Un-mix the background colour out of the alpha edge.
+
+    `rgb` is HxWx3 uint8 (or float 0..1), alpha is HxW in 0..1. Returns a float RGB
+    image in 0..1 with the background tint removed, or None when pymatting-style
+    decontamination would be too expensive for this size.
+
+    This mirrors `refine_foreground` in ZhengPeng7/BiRefNet's image_proc.py, which
+    thanks Photoroom's fast-foreground-estimation. Without it, hair keeps a rim of
+    the old background and looks dirty on a white or coloured backdrop.
+    """
+    if rgb.dtype == np.uint8:
+        image = rgb.astype(np.float32) / 255.0
+    else:
+        image = np.asarray(rgb, dtype=np.float32)
+    a = np.clip(np.asarray(alpha, dtype=np.float32), 0.0, 1.0)
+    if image.shape[:2] != a.shape:
+        return None
+
+    fg, blur_bg = _fb_blur_fusion(image, image, image, a, r)
+    fg, _ = _fb_blur_fusion(image, fg, blur_bg, a, 6)
+    return fg
 
 
 def feather(alpha: np.ndarray, radius: float) -> np.ndarray:
