@@ -260,6 +260,20 @@ slightly, and transparency is not guaranteed — the status line reports the sha
 of pixels that really became transparent so the result is never oversold. When
 that share is low, the app says to use the on-device or remove.bg engine.
 
+### The three headline models
+
+| model | size | when to pick it |
+| --- | --- | --- |
+| `BEN2 — best edges` | ~209 MB | hair, fur, transparent edges; needs WebGPU |
+| `BRIA RMBG 2.0 — best on people` | ~366 MB | portraits, cleanest skin/hair boundary; heavy, WiFi + WebGPU |
+| `BiRefNet lite 512` | ~109 MB | the balance point — good edges, runs on GPU or CPU |
+
+RMBG 2.0's official repo (`briaai/RMBG-2.0`) is gated behind a licence click and
+its free tier is non-commercial, so the app loads the ungated ONNX re-upload
+`kn4666/bria-rmbg-2.0-web` (same BiRefNet architecture, `model_type: birefnet`,
+which transformers.js maps to image segmentation). The entry is marked
+⚠ non-commercial in the picker; commercial use needs a BRIA licence.
+
 ### IMG.LY — the worker engine
 
 `@imgly/background-removal` (v1.7.0) is in the model list as
