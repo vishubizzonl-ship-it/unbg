@@ -64,6 +64,20 @@ and opens the browser. No `git pull`, no `npm install` by hand.
 | `unbg stop` / `unbg restart` | obvious |
 | `unbg update` | pull + reinstall, no start |
 
+### Zero-command mode (Termux:Boot + widget)
+
+`unbg` installs two extra entry points on Termux, so after the one-time setup you
+never type anything:
+
+| Trigger | File installed | Needs |
+|---|---|---|
+| **Phone boot** → server starts by itself | `~/.termux/boot/70-unbg` | the [Termux:Boot](https://f-droid.org/packages/com.termux.boot/) add-on app (open it once after installing) |
+| **Home screen tap** → server + browser | `~/.shortcuts/unbg` | the [Termux:Widget](https://f-droid.org/packages/com.termux.widget/) add-on; long-press home → Widgets → Termux |
+| A notification appears when it's live | `termux-notification` | termux-api package (`pkg install termux-api`) |
+
+Both scripts take a wake-lock first, so Android doesn't freeze the server while
+the screen is off. Re-run `unbg autostart` any time to rewrite them.
+
 Environment overrides: `UNBG_DIR` (default `~/unbg`), `UNBG_PORT` (default `4321`),
 `UNBG_TOKEN` (saved once to `~/.unbg-token`, `chmod 600`).
 

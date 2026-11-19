@@ -5,7 +5,11 @@
 #   curl -fsSL "https://x-access-token:<TOKEN>@raw.githubusercontent.com/vishubizzonl-ship-it/unbg/main/scripts/termux-setup.sh" \
 #     -o "$PREFIX/bin/unbg" && chmod +x "$PREFIX/bin/unbg" && unbg
 #
-# After that, just type:  unbg
+# After that you never type anything again:
+#   * phone boot   -> Termux:Boot runs ~/.termux/boot/70-unbg
+#   * home screen  -> "unbg" widget (Termux:Widget) starts it with one tap
+#   * or just type:  unbg
+#
 #   unbg          setup + start (auto-updates from GitHub, no manual git pull)
 #   unbg status   is it running?
 #   unbg logs     live log
@@ -136,6 +140,47 @@ healthy() { curl -fsS -o /dev/null "http://127.0.0.1:$1/" 2>/dev/null; }
 
 running() { pid_alive && [ "$(server_port)" = "$PORT" ] && healthy "$PORT"; }
 
+is_termux() { [ -n "${PREFIX:-}" ] && [ -d "$PREFIX/bin" ]; }
+
+# Boot script + home-screen widget, so the server needs no command at all.
+install_autostart() {
+  is_termux || return 0
+  local sh="$PREFIX/bin/sh"
+  [ -x "$sh" ] || sh="/bin/sh"
+
+  mkdir -p "$HOME/.termux/boot" "$HOME/.shortcuts"
+
+  # Termux:Boot — runs on every device start (survives reboot).
+  cat > "$HOME/.termux/boot/70-unbg" <<BOOT
+#!$sh
+# installed by unbg — starts the dev server when the phone boots
+termux-wake-lock 2>/dev/null || true
+sleep 5
+exec "$PREFIX/bin/unbg" start >/dev/null 2>&1
+BOOT
+  chmod +x "$HOME/.termux/boot/70-unbg"
+
+  # Termux:Widget — one-tap icon on the home screen.
+  cat > "$HOME/.shortcuts/unbg" <<WIDGET
+#!$sh
+termux-wake-lock 2>/dev/null || true
+"$PREFIX/bin/unbg" start
+termux-open "http://localhost:$PORT" 2>/dev/null || true
+WIDGET
+  chmod +x "$HOME/.shortcuts/unbg"
+
+  ok "Autostart installed: boot script + home-screen widget"
+}
+
+notify_live() {
+  command -v termux-notification >/dev/null || return 0
+  termux-notification \
+    --id unbg \
+    --title "unbg is live" \
+    --content "http://localhost:$PORT — tap to open" \
+    --action "termux-open http://localhost:$PORT" 2>/dev/null || true
+}
+
 start_server() {
   if running; then
     ok "Server already running (pid $(server_pid)) on port $PORT"
@@ -159,6 +204,7 @@ start_server() {
 
   if healthy "$PORT"; then
     ok "unbg is live → http://localhost:$PORT"
+    notify_live
     local ip; ip="$(lan_ip)"
     [ -n "$ip" ] && ok "Same Wi-Fi par: http://$ip:$PORT"
     echo "   logs: unbg logs   ·   stop: unbg stop"
@@ -173,6 +219,7 @@ case "${1:-start}" in
     need_pkgs
     sync_repo
     install_deps
+    install_autostart
     start_server
     # keep the installed command in sync with the repo copy
     self="$APP_DIR/scripts/termux-setup.sh"
@@ -181,6 +228,11 @@ case "${1:-start}" in
     fi
     ;;
   status)
+    if [ -f "$HOME/.termux/boot/70-unbg" ]; then
+      ok "Autostart: boot script present (Termux:Boot)"
+    elif is_termux; then
+      warn "Autostart not installed — run: unbg"
+    fi
     if running; then
       ok "Running (pid $(server_pid)) on http://localhost:$PORT"
     else
@@ -205,12 +257,25 @@ case "${1:-start}" in
     "$0" stop
     "$0" start
     ;;
+  autostart)
+    if is_termux; then
+      install_autostart
+      echo "   Phone boot → server khud start hoga (Termux:Boot app chahiye)"
+      echo "   Home screen → 'unbg' widget, ek tap (Termux:Widget addon)"
+    else
+      warn "Termux detect nahi hua — autostart files sirf Termux par bante hain"
+    fi
+    ;;
+  open)
+    command -v termux-open >/dev/null && termux-open "http://localhost:$PORT" 2>/dev/null \
+      || say "Open http://localhost:$PORT in your browser"
+    ;;
   update)
     sync_repo
     install_deps
     ok "Updated — restart with: unbg restart"
     ;;
   *)
-    die "Unknown command: $1 (try: start | status | logs | stop | restart | update)"
+    die "Unknown command: $1 (try: start | status | logs | stop | restart | update | open)"
     ;;
 esac
