@@ -1,3 +1,14 @@
+## RULES.md — bina padhe koi kaam nahi
+
+Har coding command se pehle `RULES.md` padho. Rule verbatim attach hota hai:
+
+> es folder main coding ke leye installed git,node js aur folder ke under installed astro js,wise jobs ka digine MD, guidelines skill, tailwind 4 skill, tailwind CSS ,astro js MCP sirf enhei sab chijo ka use karna aur jo command main bola gya hai bus vahi kaam karna hai kaam best karna hai aur kaam karney ke baad check karna hai kaam sahi sahi hua hai ya nhi aur real main kaam hua bhi hai ya nhi
+
+Sirf allowed: git, Node.js, Astro JS, DESIGN.md (Vercel), web-design-guidelines skill, tailwind-4-docs skill, Tailwind CSS 4, Astro Docs MCP.
+Kaam ke baad build + real output verify karo, phir hi 'ho gaya' bolo.
+
+---
+
 ## Development
 
 When starting the dev server, use background mode:
