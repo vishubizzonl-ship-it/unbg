@@ -2,6 +2,7 @@
 """Download model weights. No token, no gated repos, resumable.
 
     python scripts/fetch_models.py --list
+    python scripts/fetch_models.py silueta              # 44 MB, the lightweight default
     python scripts/fetch_models.py birefnet-512         # 473 MB, full BiRefNet at 512 px
     python scripts/fetch_models.py birefnet-lite        # 224 MB, fastest CPU option
     python scripts/fetch_models.py birefnet-matting     # 972 MB, softest alpha (hair, fur)
@@ -71,9 +72,9 @@ REPOS = {
     ),
 }
 
-# U²-Net is Apache-2.0, published by the author's ecosystem via rembg's public release.
+# Silueta and U²-Net are Apache-2.0, published via rembg's public GitHub release.
 U2NET_URL = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/{name}.onnx"
-U2NET = {"u2netp", "u2net"}
+U2NET = {"silueta", "u2netp", "u2net"}
 
 
 def human(size: float) -> str:

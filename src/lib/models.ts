@@ -191,6 +191,18 @@ export const MODELS: BgModel[] = [
     engine: 'puter',
   },
   {
+    id: 'api/silueta',
+    label: 'Server · Silueta — light & fast (44 MB)',
+    note: 'Local server ka default: 44 MB, CPU par ~1s, portrait aur product dono — BiRefNet se halka',
+    license: 'Apache-2.0',
+    licenseOk: true,
+    sizeMb: 0,
+    speed: 'fast',
+    scope: 'general',
+    dtype: 'fp32',
+    engine: 'server',
+  },
+  {
     id: 'api/birefnet-portrait',
     label: 'Server · BiRefNet Portrait — best on people',
     note: 'Apne local server par full BiRefNet (972 MB, MIT) — portrait aur baal par sabse saaf; server/ chalu hona chahiye',

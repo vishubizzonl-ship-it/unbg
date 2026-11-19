@@ -58,6 +58,7 @@ class Engine(ABC):
     """A background-removal model. Subclasses only implement `_infer`."""
 
     info: EngineInfo
+    supports_second_pass = False
 
     def __init__(self) -> None:
         self._loaded = False

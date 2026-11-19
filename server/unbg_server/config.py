@@ -50,11 +50,19 @@ class Settings:
     allowed_formats: tuple[str, ...] = ("JPEG", "PNG", "WEBP")
 
     # inference
-    default_model: str = field(default_factory=lambda: os.environ.get("UNBG_DEFAULT_MODEL", "birefnet-lite"))
+    default_model: str = field(default_factory=lambda: os.environ.get("UNBG_DEFAULT_MODEL", "silueta"))
     input_size: int = field(default_factory=lambda: _int("UNBG_INPUT_SIZE", 1024))
     intra_threads: int = field(default_factory=lambda: _int("UNBG_THREADS", max(1, (os.cpu_count() or 2) // 2)))
     max_concurrency: int = field(default_factory=lambda: _int("UNBG_MAX_CONCURRENCY", 1))
     use_gpu: bool = field(default_factory=lambda: _bool("UNBG_USE_GPU", True))
+    # keep exactly one model resident: a 972 MB BiRefNet graph must not sit next to
+    # another one on a small box (this is what "do not load heavy models together" means)
+    single_model: bool = field(default_factory=lambda: _bool("UNBG_SINGLE_MODEL", True))
+    # Silueta's second pass on the subject crop. Measured on a ground-truth test card it
+    # buys nothing at 0.10 padding and only reaches parity at 0.40, while costing ~2x the
+    # time — so it is off by default. Turn it on for photos where the subject is small
+    # in frame and the edges are the hard part.
+    second_pass: bool = field(default_factory=lambda: _bool("UNBG_SECOND_PASS", False))
 
     # post-processing
     matte: bool = field(default_factory=lambda: _bool("UNBG_MATTE", True))

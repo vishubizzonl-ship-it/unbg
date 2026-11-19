@@ -173,6 +173,57 @@ def test_smoothstep_pushes_midtones_apart():
     assert out[1] < 0.2 and out[2] > 0.8
 
 
+# ------------------------------------------------------------------ silueta / policy
+def test_silueta_is_the_default_engine():
+    from unbg_server.config import settings
+    from unbg_server.engines import registry
+
+    assert settings.default_model == "silueta"
+    assert registry.get().info.id == "silueta"
+    for alias in ("light", "fast", "default", "photo"):
+        assert registry.get(alias).info.id == "silueta"
+
+
+def test_registry_lists_lightweight_first_and_keeps_heavy_models_optional():
+    from unbg_server.engines import registry
+
+    described = registry.describe()
+    assert described[0]["id"] == "silueta"
+    assert described[0]["size_mb"] == 44
+    assert {"birefnet-general", "birefnet-portrait", "u2netp"} <= {m["id"] for m in described}
+
+
+def test_only_one_model_is_kept_in_memory():
+    from unbg_server.config import settings
+    from unbg_server.engines import registry
+
+    assert settings.single_model is True
+    first = registry.get("fake")
+    first.load()
+    assert "fake" in registry.loaded_models()
+    registry.get("silueta")  # a different id evicts the previous engine
+    assert "fake" not in registry.loaded_models()
+    assert "silueta" in registry._CACHE  # noqa: SLF001
+
+
+def test_silueta_crop_box_covers_the_subject_with_padding():
+    from unbg_server.engines.silueta import CROP_PAD, SiluetaEngine
+
+    engine = SiluetaEngine()
+    mask = np.zeros((100, 200), dtype=np.float32)
+    mask[40:60, 50:150] = 1.0
+    left, top, right, bottom = engine._subject_box(mask)
+    assert left < 50 and right > 150 and top < 40 and bottom > 60
+    assert left == max(0, 50 - int(100 * CROP_PAD))
+    assert engine._subject_box(np.zeros((10, 10), dtype=np.float32)) is None
+
+
+def test_second_pass_is_off_by_default():
+    from unbg_server.config import settings
+
+    assert settings.second_pass is False
+
+
 # ------------------------------------------------------------------ endpoints
 def test_health(client):
     body = client.get("/api/health").json()

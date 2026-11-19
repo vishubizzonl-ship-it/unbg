@@ -319,7 +319,7 @@ tools — run the inference service in `server/`:
 ```bash
 cd server
 python -m pip install --user -r requirements.txt
-python scripts/fetch_models.py birefnet-512          # 473 MB — good CPU default
+python scripts/fetch_models.py silueta               # 44 MB — the lightweight default
 python scripts/selftest.py                           # proves it actually works
 python -m uvicorn unbg_server.main:app --port 8000
 ```
@@ -333,8 +333,8 @@ What the server adds on top of the browser engine:
 
 | | browser | local server |
 |---|---|---|
-| models | 9 on-device + 4 remote | BiRefNet General / Portrait / Matting / Lite / Lite-2K / HR / 512, U²-Net, U²-Net-p |
-| weights | ≤ 366 MB, WebGPU-bound | the author's own ONNX release — full 972 MB fp32, 2K and 2048 px variants (MIT) |
+| models | 9 on-device + 4 remote | **Silueta (44 MB default)** + BiRefNet General / Portrait / Matting / Lite / Lite-2K / HR / 512, U²-Net, U²-Net-p |
+| weights | ≤ 366 MB, WebGPU-bound | 44 MB default; BiRefNet checkpoints up to 1.1 GB from the author's own ONNX release (MIT) |
 | matting | ViTMatte (99 MB) | closed-form matting (pymatting) on the mask |
 | big photos | one pass, downscaled | `detail=high` → tiled 1024 px crops, native detail |
 | batch | one at a time | `POST /api/batch`, 8 files, per-file JSON |

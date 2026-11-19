@@ -152,6 +152,9 @@ async def remove(
         True, description="un-mix the background colour out of the alpha edge (no white halo)"
     ),
     detail: str = Query("normal", description="normal | high (tiled, keeps native detail)"),
+    second_pass: bool | None = Query(
+        None, description="Silueta only: extra pass on the subject crop for crisp edges"
+    ),
     subject: str = Query("auto", description="auto | person | object"),
     store: bool = Query(False, description="also keep a /results/{id}.png copy"),
 ):
@@ -166,6 +169,7 @@ async def remove(
         background=background,
         matte=matte,
         decontaminate=decontaminate,
+        second_pass=second_pass,
         detail=detail,
         subject=subject,
     )

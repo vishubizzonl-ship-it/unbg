@@ -58,6 +58,16 @@ class U2NetEngine(Engine):
             self._size = (int(width), int(height))
         self._loaded = True
 
+    @property
+    def runtime(self) -> dict:
+        if self._session is None:
+            return {}
+        return {
+            "providers": self._session.providers,
+            "file": self._session.path.name,
+            "input": list(self._session.input.shape),
+        }
+
     def preprocessing_size(self, width: int, height: int, input_size: int) -> tuple[int, int]:
         """U²-Net is fixed-size (320 or 512); resize once, not twice."""
         if self._size:

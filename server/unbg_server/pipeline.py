@@ -21,6 +21,7 @@ def remove_background(
     background: str | None = None,
     matte: bool | None = None,
     decontaminate: bool | None = None,
+    second_pass: bool | None = None,
     detail: str = "normal",
     subject: str = "auto",
 ) -> tuple[bytes, dict]:
@@ -33,9 +34,10 @@ def remove_background(
 
     rgb = loaded.rgb  # uint8, used by the compositor and matting solver
     rgb_float = loaded.rgb.astype("float32") / 255.0  # what the network sees
-    alpha, predict_meta = engine.predict(
-        rgb_float, input_size=settings.input_size, detail=detail
-    )
+    predict_kwargs: dict = {"input_size": settings.input_size, "detail": detail}
+    if second_pass is not None and getattr(engine, "supports_second_pass", False):
+        predict_kwargs["second_pass"] = second_pass
+    alpha, predict_meta = engine.predict(rgb_float, **predict_kwargs)
     alpha, refine_meta = refine.refine(alpha, rgb, matte=matte)
 
     # BiRefNet's own last step: pull the old background colour out of the alpha edge,

@@ -147,12 +147,30 @@ def solve_alpha(rgb: np.ndarray, alpha: np.ndarray, band_px: int) -> np.ndarray 
         return None
     try:
         trimap = build_trimap(alpha, band_px)
-        solved = estimate_alpha_cf(rgb.astype(np.float64) / 255.0, trimap.astype(np.float64))
-        solved = np.asarray(solved, dtype=np.float32)
-        # Closed-form matting can wander outside the band; trust the network there.
-        out = alpha.copy()
         unknown = trimap == 0.5
-        out[unknown] = np.clip(solved, 0.0, 1.0)[unknown]
+        if not unknown.any():
+            return alpha
+
+        # Closed-form matting solves a sparse system; solving it on the whole photo is
+        # wasted work when only the edge band is unknown. Crop to that band (plus a
+        # margin) and paste the answer back — same result, a fraction of the time.
+        margin = max(8, band_px * 2)
+        rows = np.where(unknown.any(axis=1))[0]
+        cols = np.where(unknown.any(axis=0))[0]
+        y0 = max(0, int(rows[0]) - margin)
+        y1 = min(alpha.shape[0], int(rows[-1]) + margin + 1)
+        x0 = max(0, int(cols[0]) - margin)
+        x1 = min(alpha.shape[1], int(cols[-1]) + margin + 1)
+
+        sub_image = rgb[y0:y1, x0:x1].astype(np.float64) / 255.0
+        sub_trimap = trimap[y0:y1, x0:x1].astype(np.float64)
+        solved = np.asarray(estimate_alpha_cf(sub_image, sub_trimap), dtype=np.float32)
+
+        out = alpha.copy()
+        sub_unknown = unknown[y0:y1, x0:x1]
+        region = out[y0:y1, x0:x1]
+        region[sub_unknown] = np.clip(solved, 0.0, 1.0)[sub_unknown]
+        out[y0:y1, x0:x1] = region
         return out
     except Exception:  # pragma: no cover - numerical failure must never 500 a request
         return None

@@ -14,11 +14,13 @@ from ..config import settings
 from ..errors import UnknownModel
 from .base import Engine, EngineInfo
 from .birefnet import B512, GENERAL, HR, LITE, LITE2K, MATTING, PORTRAIT, BiRefNetEngine
+from .silueta import INFO as SILUETA, SiluetaEngine
 from .u2net import U2NET, U2NET_P, U2NetEngine
 
 log = logging.getLogger("unbg.registry")
 
 _FACTORIES: dict[str, callable] = {
+    SILUETA.id: lambda: SiluetaEngine(),
     GENERAL.id: lambda: BiRefNetEngine(GENERAL, "onnx-community/BiRefNet-ONNX"),
     PORTRAIT.id: lambda: BiRefNetEngine(PORTRAIT, "onnx-community/BiRefNet-portrait-ONNX"),
     MATTING.id: lambda: BiRefNetEngine(MATTING, "ZhengPeng7/BiRefNet"),
@@ -38,7 +40,7 @@ _CACHE: dict[str, Engine] = {}
 
 def get(model_id: str | None = None) -> Engine:
     """Return a (cached) engine by id, falling back to the configured default."""
-    wanted = (model_id or settings.default_model or GENERAL.id).strip()
+    wanted = (model_id or settings.default_model or SILUETA.id).strip()
     wanted = _ALIASES.get(wanted, wanted)
     if wanted not in _FACTORIES:
         raise UnknownModel(
@@ -46,11 +48,29 @@ def get(model_id: str | None = None) -> Engine:
         )
     with _LOCK:
         if wanted not in _CACHE:
+            if settings.single_model:
+                _evict_all()
             _CACHE[wanted] = _FACTORIES[wanted]()
         return _CACHE[wanted]
 
 
+def _evict_all() -> None:
+    """Drop every other session so only one graph is ever resident."""
+    for other_id, engine in list(_CACHE.items()):
+        session = getattr(engine, "_session", None)
+        if session is not None:
+            log.info("evicting %s to keep a single model in memory", other_id)
+        if hasattr(engine, "_session"):
+            engine._session = None  # noqa: SLF001 - intentional teardown
+            engine._loaded = False
+        _CACHE.pop(other_id, None)
+
+
 _ALIASES = {
+    "light": SILUETA.id,
+    "fast": SILUETA.id,
+    "default": SILUETA.id,
+    "photo": SILUETA.id,
     "general": GENERAL.id,
     "portrait": PORTRAIT.id,
     "matting": MATTING.id,
@@ -93,13 +113,12 @@ def describe() -> list[dict]:
 
 
 def best_for(subject: str) -> str:
-    """Pick a sensible default: portraits get the portrait checkpoint when installed."""
-    wanted = (subject or "auto").strip().lower()
-    if wanted in {"person", "portrait", "people", "human", "selfie"}:
-        portrait = get(PORTRAIT.id)
-        if portrait.available():
-            return PORTRAIT.id
-    return settings.default_model or GENERAL.id
+    """Lightweight by default: Silueta handles portraits and products in one 44 MB graph.
+
+    A heavier checkpoint is only chosen when it is installed *and* the caller asked for
+    it explicitly — `model=` beats `subject=` every time.
+    """
+    return settings.default_model or SILUETA.id
 
 
 def warm_default() -> dict:
