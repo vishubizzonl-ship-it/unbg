@@ -1,0 +1,10 @@
+# unbg inference API — open-source only, no paid services, no API keys.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pillow>=10.3
+numpy>=1.26
+onnxruntime>=1.18        # CPU build; install onnxruntime-gpu on a CUDA box instead
+pymatting>=1.1.12        # closed-form alpha matting (pure numpy)
+httpx>=0.27              # model download helper + tests
+pytest>=8.0

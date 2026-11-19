@@ -1,0 +1,11 @@
+# weights, generated cutouts and caches never belong in git
+models/
+results/
+*.onnx
+*.part
+out-*.png
+*-cutout.png
+selftest-card.jpg
+__pycache__/
+.pytest_cache/
+.venv/

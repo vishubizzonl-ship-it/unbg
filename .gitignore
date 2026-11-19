@@ -39,3 +39,14 @@ pnpm-debug.log*
 # test build output
 .dist-test/
 dist-test/
+
+# python inference service (server/)
+server/models/
+server/results/
+server/*.onnx
+server/selftest-card.jpg
+server/out-*.png
+__pycache__/
+.pytest_cache/
+.venv/
+server/tests/__pycache__/
