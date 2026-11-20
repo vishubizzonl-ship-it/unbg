@@ -1,0 +1,39 @@
+{
+  "app": "unbg",
+  "tagline": "remove the background. keep every pixel.",
+  "version": "0.9.8",
+  "build": "902c8fd",
+  "theme": "ink-on-canvas (Vercel design language)",
+  "models": {
+    "count": 18,
+    "default_at_runtime": "device-aware — BEN2 on WebGPU, ormbg on CPU",
+    "labels": [
+      "BEN2 — best edges",
+      "BRIA RMBG 2.0 — best on people",
+      "BiRefNet lite 512",
+      "ormbg — best on CPU",
+      "MVANet",
+      "BiRefNet lite 1024",
+      "RMBG-1.4",
+      "BiRefNet full",
+      "IS-Net",
+      "MODNet",
+      "IMG.LY isnet fp16 — better edges",
+      "IMG.LY isnet quint8 — fastest",
+      "Puter.js — no key, user pays",
+      "Server · Silueta — light & fast (44 MB)",
+      "Server · BiRefNet Portrait — best on people",
+      "Server · BiRefNet Matting — softest hair",
+      "Server · BiRefNet General — products & objects",
+      "Server · U²-Net-p — 5 MB fallback"
+    ]
+  },
+  "device_runtime": "transformers.js + onnxruntime-web (WebGPU / WASM)",
+  "uploads": "none — inference runs in the browser",
+  "optional_backend": {
+    "path": "server/",
+    "stack": "FastAPI + ONNX Runtime + BiRefNet (MIT) / U²-Net (Apache-2.0)",
+    "default_port": 8000,
+    "keys_required": false
+  }
+}
